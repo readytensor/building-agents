@@ -38,13 +38,17 @@ These have been settled across planning conversations. Build on them; don't re-d
 - **Capstone (real-project) episode is deferred.** Decide after Ep 4. If kept, it's a looser documentary companion piece.
 - **Framing principle for scope:** *Things that change the agent's shape are in scope. Things that wrap around it aren't.* Out of scope (separate series candidates): durable execution, full guardrails, production ops, prompt engineering at the token level, framework reviews, model training/RL.
 
+## Status
+
+- **Ep 1** — agent.py implemented (~90 LOC), runs cleanly against `md2html` on Sonnet 4.6, verified across 4 trajectories (16–22 tool calls each, all converge on a correct summary). Producer brief at `tmp/video-creation-notes/episode-01.md`. Locked.
+- **Ep 2** — agent.py implemented (~170 LOC including the `@tool` decorator and 5 tools), `initial/` has the planted escaped-backtick bug in `parser.py` + the `escaped_backticks` fixture pair. Baseline `pytest` shows 42 passed + 1 failed (only the new fixture). Across 3 agent runs the fix lands correctly every time (12–19 tool calls, all using bash+read+edit, one also using grep). After fix, 43/43 pass. Producer brief not yet written.
+- **Eps 3–5** — not yet spec'd.
+
 ## Open decisions
 
-- **Per-episode `initial/` states for Ep 2–5.** Sketched in `spec/md2html.md` section 8 but not yet detailed. To be fleshed out as separate planning artifacts when each episode is being prepared. The episode-2 planted bug, episode-3 refactor target, episode-4 ambiguous failure, and episode-5 LaTeX-renderer spec all need pinning before implementation.
-- **Implementation details of `md2html` itself.** Function signatures, `Token`/`Node` class layouts, extension registration mechanism, parser strategy (recursive-descent vs. table-driven vs. hand-rolled state machine) — deferred to the code-writing phase, not the spec.
-- **The `md2html` implementation itself.** Skeleton scaffolding is in place under `code/episodes/01-loop/initial/` (a README placeholder), but the actual ~1,200 LOC of `md2html` source + tests has not been written. Needed before Ep 1's `agent.py` can be filled in (the agent needs something real to explore).
-- **Ep 1 `agent.py` body.** The 5-line sandbox-reset bootstrap is in place; the rest of the agent loop (openai client setup, `bash` tool definition, the `while` loop, naive stop condition) is TODO. ~60-80 lines target.
+- **Per-episode `initial/` states for Ep 3–5.** Sketched in `spec/md2html.md` §8 but not yet detailed. To be fleshed out as separate planning artifacts when each episode is being prepared.
+- **Implementation details of `md2html` itself.** Function signatures, `Token`/`Node` class layouts, extension registration mechanism, parser strategy — chosen by the subagent that implemented Ep 1's `initial/`. See subagent report in conversation history for the choices made.
 
 ## Code skeleton
 
-The companion code repo's skeleton lives at `code/` in this workspace (will be split out to its own public repo when ready). See `code/README.md` and `code/episodes/<N>-*/README.md` for the per-episode entry points. Every `agent.py` already includes the 5-line `initial/` → `sandbox/` bootstrap; the agent loop itself is TODO in each.
+The companion code repo's skeleton lives at `code/` in this workspace (will be split out to its own public repo when ready). See `code/README.md` and `code/episodes/<N>-*/README.md` for the per-episode entry points. Every `agent.py` already includes the 5-line `initial/` → `sandbox/` bootstrap; for Ep 2 onward the agent loop body still needs implementation.

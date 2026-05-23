@@ -179,9 +179,10 @@ Why this fits the series:
 
 ### Spec
 
-Full `md2html` spec — architecture, markdown subset, extensions, CLI, file-by-file responsibilities, and Ep 1's `initial/` definition — is in [`spec/md2html.md`](./spec/md2html.md).
-
-Per-episode `initial/` divergences (planted bug for Ep 2, refactor target for Ep 3, ambiguous bug for Ep 4, LaTeX-renderer spec for Ep 5) are sketched in section 8 of that doc and will be fleshed out as separate planning artifacts when each episode is being prepared.
+- **Toy codebase spec:** [`spec/md2html.md`](./spec/md2html.md) — architecture, markdown subset, extensions, CLI, file-by-file responsibilities, Ep 1's `initial/` definition. Authoritative for the toy codebase.
+- **Per-episode specs** (define what changes from the previous episode — agent additions and `initial/` state divergences):
+  - **Episode 2:** [`spec/episode-02.md`](./spec/episode-02.md) — adds 4 tools + `@tool` decorator; plants escaped-backtick bug in parser.py; adds `escaped_backticks` fixture pair.
+  - Episodes 3–5: to be written as each is prepared.
 
 ---
 
