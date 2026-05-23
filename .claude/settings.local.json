@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pytest --version)",
+      "Bash(pytest)",
+      "Read(//tmp/**)",
+      "Bash(rm /tmp/basic_out.html)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(pip install *)",
+      "PowerShell(Test-Path 'C:\\\\Users\\\\abbus\\\\Documents\\\\rt-genai-workflows\\\\video-project-planning\\\\video-projects\\\\building-agents\\\\code\\\\.env'; if \\($env:ANTHROPIC_API_KEY\\) { Write-Output \"ANTHROPIC_API_KEY is set in shell \\($\\([string]$env:ANTHROPIC_API_KEY\\).Length chars\\)\" } else { Write-Output \"ANTHROPIC_API_KEY not set\" })",
+      "PowerShell(if \\($env:OPENAI_API_KEY\\) { Write-Output \"OPENAI_API_KEY is set in shell \\($\\([string]$env:OPENAI_API_KEY\\).Length chars\\)\" } else { Write-Output \"OPENAI_API_KEY not set\" })"
+    ]
+  }
+}

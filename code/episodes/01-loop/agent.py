@@ -1,0 +1,107 @@
+"""
+Episode 1 — The Loop
+
+Minimal agent: a while-loop calling a single `bash` tool until the model stops
+requesting tool calls. Naive stop condition. ~80 lines.
+
+See ../../README.md and ../../../spec/md2html.md for context.
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+from dotenv import load_dotenv
+from openai import OpenAI
+
+# Windows: make sure stdout can render UTF-8 (LLM outputs often contain → ✓ etc.)
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
+# --- 1. Sandbox reset: every run starts from a clean copy of initial/.
+INITIAL = Path("initial")
+SANDBOX = Path("sandbox")
+if SANDBOX.exists():
+    shutil.rmtree(SANDBOX)
+shutil.copytree(INITIAL, SANDBOX)
+
+# --- 2. LLM client. The openai package targets any OpenAI-compatible endpoint.
+load_dotenv(Path("../../.env"))
+BASE_URL = os.environ.get("OPENAI_BASE_URL") or ""
+API_KEY = os.environ.get("ANTHROPIC_API_KEY") if "anthropic" in BASE_URL else os.environ.get("OPENAI_API_KEY")
+MODEL = os.environ.get("OPENAI_MODEL", "gpt-5-mini")
+client = OpenAI(api_key=API_KEY, base_url=BASE_URL or None)
+
+# --- 3. The one tool: bash, bounded to the sandbox directory.
+def bash(command: str) -> str:
+    """Execute a shell command inside the sandbox and return its output.
+
+    check=False is deliberate: command failures (non-zero exit) come back to
+    the LLM as tool output so the model can adapt — e.g., 'ls' fails on
+    Windows cmd, the LLM sees the error and pivots to 'dir'. Crashing the
+    agent on non-zero exit would defeat that.
+
+    shell=True is also deliberate — this IS the bash tool. The security
+    model is the sandbox boundary (cwd bounded to a fresh copy of initial/),
+    not the subprocess argument shape.
+    """
+    result = subprocess.run(  # noqa: S602  # nosec
+        command, shell=True, capture_output=True, text=True,
+        cwd=SANDBOX, timeout=30,
+        encoding="utf-8", errors="replace",
+        check=False,
+    )
+    return (result.stdout + result.stderr).strip() or "(no output)"
+
+BASH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "bash",
+        "description": "Execute a shell command in the working directory and return its output.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "command": {"type": "string", "description": "The shell command to run."},
+            },
+            "required": ["command"],
+        },
+    },
+}
+
+# --- 4. The agent loop.
+SYSTEM = (
+    "You are a coding assistant operating inside a sandboxed working "
+    "directory. Use the available tools to investigate, modify, and "
+    "verify code. Ground claims in what you actually observe; don't "
+    "guess. When the task is complete, stop calling tools and produce "
+    "a clear answer."
+)
+TASK = "Explore the codebase in the current directory and tell me what it does."
+
+messages = [
+    {"role": "system", "content": SYSTEM},
+    {"role": "user", "content": TASK},
+]
+print(f"USER: {TASK}\n")
+
+while True:
+    resp = client.chat.completions.create(
+        model=MODEL, messages=messages, tools=[BASH_TOOL],
+    )
+    msg = resp.choices[0].message
+    messages.append(msg.model_dump(exclude_none=True))
+
+    if not msg.tool_calls:
+        print(f"\n=== FINAL RESPONSE ===\n\n{msg.content or ''}")
+        break
+
+    for tc in msg.tool_calls:
+        args = json.loads(tc.function.arguments)
+        print(f"> bash({args['command']!r})")
+        result = bash(**args)
+        preview = result if len(result) < 400 else result[:400] + "...[truncated]"
+        print(f"  {preview}\n")
+        messages.append({
+            "role": "tool", "tool_call_id": tc.id, "content": result,
+        })
