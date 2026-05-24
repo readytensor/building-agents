@@ -41,8 +41,9 @@ These have been settled across planning conversations. Build on them; don't re-d
 ## Status
 
 - **Ep 1** — agent.py implemented (~90 LOC), runs cleanly against `md2html` on Sonnet 4.6, verified across 4 trajectories (16–22 tool calls each, all converge on a correct summary). Producer brief at `tmp/video-creation-notes/episode-01.md`. Locked.
-- **Ep 2** — agent.py implemented (~170 LOC including the `@tool` decorator and 5 tools), `initial/` has the planted escaped-backtick bug in `parser.py` + the `escaped_backticks` fixture pair. Baseline `pytest` shows 42 passed + 1 failed (only the new fixture). Across 3 agent runs the fix lands correctly every time (12–19 tool calls, all using bash+read+edit, one also using grep). After fix, 43/43 pass. Producer brief not yet written.
-- **Eps 3–5** — not yet spec'd.
+- **Ep 2** — agent.py implemented (~170 LOC including the `@tool` decorator, 5 tools, and ambient token instrumentation), `initial/` has the planted escaped-backtick bug in `parser.py` + the `escaped_backticks` fixture pair. Baseline `pytest` shows 42 passed + 1 failed. Across 3 instrumented runs the fix lands correctly every time (13–14 LLM iterations, 16–17 tool calls, all using bash+read+edit). Token totals 124K–145K cumulative input — 17% variance on same task. Producer brief at `tmp/video-creation-notes/episode-02.md`. Locked.
+- **Ep 3** — spec'd + implemented + 7 trajectories recorded + producer brief done. Agent.py ~280 LOC (Ep 2 base + `TaskComplete`/`done` tool + `compact()` function + try/except tool dispatch + MAX_ITERATIONS cap). System prompt has the only series-wide change (1 sentence). 4-step verification (pytest 43/43 + `\bNode\b`=0 + `\bASTNode\b`≈56 + diff scope) applied to every recorded run, case-sensitive matters. Headline empirical finding: **parameter sweep produced a "hallucinated success" failure mode** at aggressive compaction (5K threshold + Keep 2 — agent calls done() with confident summary but leaves work half-finished, pytest broken). This is the bridge to Ep 4. Sweet spot: 10K+3 (67% token savings vs control, fully correct). Producer brief at `tmp/video-creation-notes/episode-03.md`. Locked.
+- **Eps 4–5** — not yet spec'd.
 
 ## Open decisions
 

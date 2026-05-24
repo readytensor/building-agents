@@ -128,6 +128,20 @@ All five tools have the same sandbox boundary as Ep 1: paths resolve relative to
 
 The four cover the four operations a coding agent does most: **read, write, edit (surgical), search**. Anything else (`find`, `mv`, `rm`, etc.) the agent can do via `bash`. Keeping the named-tool count to 5 honors the "few general tools" lesson.
 
+### Tool-dispatch robustness (added near the end of the episode)
+
+Wrap the `result = fn(**args)` line in a `try/except` block that catches `TypeError`, `KeyError`, `json.JSONDecodeError`, and `ValueError`. On error, build an error-message string and feed it back to the model as the tool result instead of crashing the agent. ~5 added LOC.
+
+**Why these exception types:**
+- `TypeError` — model called a tool with missing/extra/wrong-named args (common: `bash()` with no `command`).
+- `KeyError` — model called a tool name not in the registry (hallucinated tool).
+- `JSONDecodeError` — malformed JSON in `tc.function.arguments`.
+- `ValueError` — arg-validation failures inside tools (e.g., invalid regex passed to `grep`).
+
+**Why this lives in Ep 2 and not Ep 1:** Ep 1 has one tool (`bash`) with one parameter (`command`); the model essentially can't get the schema wrong. Ep 2's expansion to 5 tools with varied signatures is the first time malformed tool calls become a real failure mode.
+
+**Why "near the end" of the episode**: the lesson — *"the model will sometimes hallucinate tool args; route errors back to it as messages, don't crash"* — is real and architectural, but it's a 30-second mention, not a main beat. Treating it as a closing micro-addition ("one important thing before we close — here's 5 lines we added") keeps Ep 2's main narrative focused on tools + the `@tool` decorator. Ep 3 inherits the pattern unchanged.
+
 ---
 
 ## 5. The `@tool` decorator

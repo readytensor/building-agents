@@ -200,11 +200,17 @@ while True:
         break
 
     for tc in msg.tool_calls:
-        fn = TOOLS_BY_NAME[tc.function.name]
-        args = json.loads(tc.function.arguments)
-        arg_preview = ", ".join(f"{k}={v!r}" if len(repr(v)) < 60 else f"{k}=<{len(str(v))} chars>" for k, v in args.items())
-        print(f"> {tc.function.name}({arg_preview})")
-        result = fn(**args)
+        try:
+            fn = TOOLS_BY_NAME[tc.function.name]
+            args = json.loads(tc.function.arguments)
+            arg_preview = ", ".join(f"{k}={v!r}" if len(repr(v)) < 60 else f"{k}=<{len(str(v))} chars>" for k, v in args.items())
+            print(f"> {tc.function.name}({arg_preview})")
+            result = fn(**args)
+        except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
+            # Tool errors come back to the model as the tool result, not as an agent crash.
+            # The model can self-correct on the next iteration.
+            result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
+            print(f"  ! {result}")
         preview = result if len(result) < 400 else result[:400] + "...[truncated]"
         print(f"  {preview}\n")
         messages.append({

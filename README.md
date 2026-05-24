@@ -18,13 +18,13 @@ The worked example is a **coding agent**. It's the cleanest domain to teach in: 
 
 ## Series arc
 
-| # | Episode | Core question | Standalone value |
-|---|---|---|---|
-| 1 | **The Loop** | What is an agent? | A working agent the viewer can run and modify today |
-| 2 | **Tools** | How does it actually do things? | An agent with real capabilities; intuition for tool design |
-| 3 | **Context** | Why does it get worse on longer tasks? | The most important practical insight in the series |
-| 4 | **Planning & Reflection** | Why does it spiral — and how do you fix it? | A more robust agent; architecture intuitions that transfer everywhere |
-| 5 | **Orchestration** | When is one agent the wrong shape? | A clear framework for when multi-agent adds value vs. overhead |
+| #   | Episode                   | Core question                               | Standalone value                                                      |
+| --- | ------------------------- | ------------------------------------------- | --------------------------------------------------------------------- |
+| 1   | **The Loop**              | What is an agent?                           | A working agent the viewer can run and modify today                   |
+| 2   | **Tools**                 | How does it actually do things?             | An agent with real capabilities; intuition for tool design            |
+| 3   | **Context**               | Why does it get worse on longer tasks?      | The most important practical insight in the series                    |
+| 4   | **Planning & Reflection** | Why does it spiral — and how do you fix it? | A more robust agent; architecture intuitions that transfer everywhere |
+| 5   | **Orchestration**         | When is one agent the wrong shape?          | A clear framework for when multi-agent adds value vs. overhead        |
 
 Each episode follows the same internal rhythm: **one question, one limitation, one addition (in code), one before/after, one abstraction** — closing with "this is the same pattern real systems use, just with more machinery."
 
@@ -33,6 +33,7 @@ Each episode follows the same internal rhythm: **one question, one limitation, o
 ## Episode plan
 
 ### Episode 1 — The Loop
+
 **Question:** What is an agent?
 **Limitation framed:** None yet — we're building from zero.
 **Addition (code):** Raw `openai` SDK call inside a `while` loop, **one tool: `bash`**, naive stop condition (no tool calls → break). ~60–80 lines.
@@ -42,6 +43,7 @@ Each episode follows the same internal rhythm: **one question, one limitation, o
 **Cliffhangers seeded:** Naive stop condition (returns in Ep 3), repetitive tool-schema definitions (cleaned in Ep 2), no history management (Ep 3), no planning (Ep 4).
 
 ### Episode 2 — Tools
+
 **Question:** How does the agent actually do things?
 **Limitation framed:** With only `bash`, the agent works but every operation goes through one channel — and writing new tool schemas by hand from Ep 1 is already tedious.
 **Addition (code):** A small set of general primitives (`read`, `write`, `grep` alongside `bash`); a tiny `@tool` decorator / schema helper to eliminate JSON-schema boilerplate; **skills** introduced as named Python helpers composed from primitives — not a new abstraction, just reusable functions.
@@ -50,47 +52,50 @@ Each episode follows the same internal rhythm: **one question, one limitation, o
 **Cliffhangers seeded:** Tools that return big outputs will start to bloat context; the agent still has no real way to signal completion.
 
 ### Episode 3 — Context
+
 **Question:** Why does the same agent succeed on some tasks and fail on others?
 **Limitation framed:** A long task fills the context window. The agent loses the thread, repeats steps, or forgets the original goal. Separately, sometimes it "falls silent" and the naive stop fires prematurely.
 **Additions (code):** **Rolling-summary compaction** — when message history crosses a token threshold, the agent summarizes older turns and continues from there. **Done tool** — an explicit `done(message)` that raises `TaskComplete`, replacing the naive stop from Ep 1.
 
-These two are paired because both serve the same theme: *making long-running tasks reliable*. Compaction keeps the agent from losing what was said; the done tool keeps it from quitting before the work is finished.
+These two are paired because both serve the same theme: _making long-running tasks reliable_. Compaction keeps the agent from losing what was said; the done tool keeps it from quitting before the work is finished.
 
 **Task:** A multi-file refactor across the repo. File contents legitimately stack up in history; the naive agent loses coherence mid-task. With compaction + done tool, it gets through cleanly.
 **Closing abstraction:** Agent capability is mostly context quality, not prompt cleverness. Performance is downstream of what the model can see, not what you told it at the start.
 **Cliffhangers seeded:** Even with managed context, the agent can still run in circles, hallucinate progress, or drift off-task — different class of failure, addressed next.
 
 ### Episode 4 — Planning & Reflection
+
 **Question:** Why does it spiral — and how do you fix it?
 **Limitation framed:** Failure gallery — runaway loops, hallucinated progress, scope drift. Each failure is shown concretely on a real task, then traced to a specific architectural gap.
 **Addition (code):** A lightweight **plan step** before the loop (agent writes a TODO list / scratchpad it can refer to and revise), and a **reflect step** triggered on tool error or repeated identical calls (forces the agent to pause and reconsider rather than charge ahead).
 **Task:** A task that exposes the failures of the naive agent — flaky test debugging or an ambiguous "make this work" goal. The fixed agent handles it; the unfixed one visibly spirals.
-**Closing abstraction:** These additions cost latency and introduce their own failure modes (over-planning, infinite reflection). The engineering is knowing when to gate them. Every production agent system has a planning layer and a reflection layer; the question is always *what's the smallest version that earns its keep*.
+**Closing abstraction:** These additions cost latency and introduce their own failure modes (over-planning, infinite reflection). The engineering is knowing when to gate them. Every production agent system has a planning layer and a reflection layer; the question is always _what's the smallest version that earns its keep_.
 **Cliffhangers seeded:** One agent is now robust but still a bottleneck for tasks with conflicting responsibilities or genuine parallelism.
 
 ### Episode 5 — Orchestration
+
 **Question:** When is one agent the wrong shape for a problem?
 **Limitation framed:** A task that genuinely strains the single-agent architecture — context overload, conflicting responsibilities, or parts of the task that benefit from different modes of operation.
 **Addition (code):** A second agent instance with its own system prompt and tool subset; a `delegate(subtask)` tool on the parent that spawns a child; minimal message-passing between them.
-**Task:** A larger task spanning multiple subdirectories or concerns — planner decomposes, executors handle subtasks. The episode also shows where this *doesn't* help: on a small task, orchestration is just routing overhead.
+**Task:** A larger task spanning multiple subdirectories or concerns — planner decomposes, executors handle subtasks. The episode also shows where this _doesn't_ help: on a small task, orchestration is just routing overhead.
 **Closing abstraction:** Multi-agent helps when tasks decompose cleanly, when parallelism matters, or when context boundaries are real constraints. When those conditions don't hold, it's overhead. The episode closes with the genuine open questions in the field — coordination failures, trust between agents, context handoffs — rather than pretending they're solved.
 
 ---
 
 ## Code progression at a glance
 
-| | Ep 1 | Ep 2 | Ep 3 | Ep 4 | Ep 5 |
-|---|---|---|---|---|---|
-| Loop | naive `while` | same | same | same | same |
-| Tools | `bash` | `bash`, `read`, `write`, `grep` | + (no new tools) | + planning/reflection scratchpad tools | + `delegate` |
-| Tool schemas | hand-written | `@tool` helper | same | same | same |
-| Stop condition | no tool calls → break | same | **`done()` / `TaskComplete`** | same | same |
-| History | raw list | raw list | **rolling-summary compaction** | same | per-agent |
-| Planning | none | none | none | **plan + reflect** | inherited |
-| Agents | 1 | 1 | 1 | 1 | **N (planner + executors)** |
-| Sandbox | 5-line `SandboxContext` | same | same | same | same |
+|                | Ep 1                    | Ep 2                            | Ep 3                           | Ep 4                                   | Ep 5                        |
+| -------------- | ----------------------- | ------------------------------- | ------------------------------ | -------------------------------------- | --------------------------- |
+| Loop           | naive `while`           | same                            | same                           | same                                   | same                        |
+| Tools          | `bash`                  | `bash`, `read`, `write`, `grep` | + (no new tools)               | + planning/reflection scratchpad tools | + `delegate`                |
+| Tool schemas   | hand-written            | `@tool` helper                  | same                           | same                                   | same                        |
+| Stop condition | no tool calls → break   | same                            | **`done()` / `TaskComplete`**  | same                                   | same                        |
+| History        | raw list                | raw list                        | **rolling-summary compaction** | same                                   | per-agent                   |
+| Planning       | none                    | none                            | none                           | **plan + reflect**                     | inherited                   |
+| Agents         | 1                       | 1                               | 1                              | 1                                      | **N (planner + executors)** |
+| Sandbox        | 5-line `SandboxContext` | same                            | same                           | same                                   | same                        |
 
-By Ep 5, the code is a recognizable *minimal subset* of the architectural pattern that powers production agent systems — loop, tools, compaction, done tool, planning/reflection, orchestration — with all the production scaffolding deliberately removed.
+By Ep 5, the code is a recognizable _minimal subset_ of the architectural pattern that powers production agent systems — loop, tools, compaction, done tool, planning/reflection, orchestration — with all the production scaffolding deliberately removed.
 
 ---
 
@@ -98,15 +103,18 @@ By Ep 5, the code is a recognizable *minimal subset* of the architectural patter
 
 **The framing principle:**
 
-> *Things that change the agent's shape are in scope. Things that wrap around it aren't.*
+> _Things that change the agent's shape are in scope. Things that wrap around it aren't._
 
 ### In scope (changes the agent's shape)
+
 - The loop, tools, history management, stop conditions, planning/reflection, multi-agent topology.
 
 ### Light touch only (acknowledged when it can't be ignored)
+
 - **Sandbox / isolation.** ~60 seconds in Ep 1 when `bash` appears. Giving the agent shell access is a security decision whether you acknowledge it or not — but the full topic is its own series.
 
 ### Out of scope (separate series, or never)
+
 - **Prompt engineering at the token level.** Context engineering is the craft; prompt tuning is downstream.
 - **Framework reviews** (LangChain, LlamaIndex, CrewAI). Those are implementations of the patterns covered, not the patterns.
 - **Model training, RL, evals.** The series takes the model as given.
@@ -134,7 +142,7 @@ Each exclusion is deliberate. The series promises depth on one thing: the archit
 
 A small but properly-structured **Markdown-to-HTML CLI tool**. Chosen because its pipeline naturally factors into real module boundaries even at small scale, giving every episode something genuine to exercise:
 
-```
+````
 md2html/
 ├── pyproject.toml
 ├── README.md
@@ -158,7 +166,7 @@ md2html/
         ├── basic.md
         ├── tables.md
         └── ...
-```
+````
 
 Why this fits the series:
 
@@ -169,20 +177,21 @@ Why this fits the series:
 
 ### Task escalation across episodes
 
-| Ep | Task on `md2html` | Why it forces the episode's lesson |
-|---|---|---|
-| 1 | Explore the repo and explain what it does | Multiple chained `bash` calls; loop is visibly iterating |
-| 2 | Fix a planted bug (e.g., lexer mishandles escaped backticks) | Needs read + edit + run pytest — earns multi-tool design |
-| 3 | Refactor across modules (e.g., rename `Token` → `Node` across lexer/parser/renderer/tests; or change an extension hook signature) | Long history of file contents naturally fills context; agent visibly loses thread |
-| 4 | Debug an ambiguous failure (e.g., "tables inside nested lists render wrong" — cause could be lexer, parser, or renderer) | Naive agent spirals; planning + reflection get it through |
-| 5 | Add LaTeX as a second output format | Touches CLI flag, new renderer, possibly extension hooks, tests — real decomposition |
+| Ep  | Task on `md2html`                                                                                                                 | Why it forces the episode's lesson                                                   |
+| --- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 1   | Explore the repo and explain what it does                                                                                         | Multiple chained `bash` calls; loop is visibly iterating                             |
+| 2   | Fix a planted bug (e.g., lexer mishandles escaped backticks)                                                                      | Needs read + edit + run pytest — earns multi-tool design                             |
+| 3   | Refactor across modules (e.g., rename `Token` → `Node` across lexer/parser/renderer/tests; or change an extension hook signature) | Long history of file contents naturally fills context; agent visibly loses thread    |
+| 4   | Debug an ambiguous failure (e.g., "tables inside nested lists render wrong" — cause could be lexer, parser, or renderer)          | Naive agent spirals; planning + reflection get it through                            |
+| 5   | Add LaTeX as a second output format                                                                                               | Touches CLI flag, new renderer, possibly extension hooks, tests — real decomposition |
 
 ### Spec
 
 - **Toy codebase spec:** [`spec/md2html.md`](./spec/md2html.md) — architecture, markdown subset, extensions, CLI, file-by-file responsibilities, Ep 1's `initial/` definition. Authoritative for the toy codebase.
 - **Per-episode specs** (define what changes from the previous episode — agent additions and `initial/` state divergences):
   - **Episode 2:** [`spec/episode-02.md`](./spec/episode-02.md) — adds 4 tools + `@tool` decorator; plants escaped-backtick bug in parser.py; adds `escaped_backticks` fixture pair.
-  - Episodes 3–5: to be written as each is prepared.
+  - **Episode 3:** [`spec/episode-03.md`](./spec/episode-03.md) — adds done tool + rolling-summary compaction (~50 LOC); task is renaming `Node` → `ASTNode` across 5 files / 58 occurrences; `initial/` is clean (no planted modifications). Includes a non-negotiable 4-step verification procedure (pytest + case-sensitive grep counts + diff). **Implemented + 7 trajectories captured + producer brief written.** Parameter sweep revealed a "hallucinated success" failure mode at aggressive compaction settings (5K threshold + Keep 2) — the agent confidently calls `done()` while leaving the task half-finished. This is the bridge to Ep 4.
+  - Episodes 4–5: to be written as each is prepared.
 
 ---
 
@@ -300,4 +309,4 @@ building-agents/
         └── sdk.png
 ```
 
-Everything in `tmp/` is for reference and visual/conceptual inspiration. Code shapes, framings, and diagram conventions are fair to *adapt*. Nothing in `tmp/` should be copied verbatim.
+Everything in `tmp/` is for reference and visual/conceptual inspiration. Code shapes, framings, and diagram conventions are fair to _adapt_. Nothing in `tmp/` should be copied verbatim.

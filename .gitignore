@@ -1,2 +1,11 @@
 tmp/
 
+# Alternative sandbox directories (scratch/experiment scripts use these)
+code/episodes/*/_sandbox*/
+
+# Parallel sweep working directories (created on-demand for parallel runs)
+code/episodes/_sweep_*/
+
+# Underscore-prefixed scripts in episodes/ are internal/scratch (e.g. _before.py,
+# _what_if_ep1_only.py) — used for reproducing recorded experiments, not viewer-facing
+code/episodes/**/_*.py
