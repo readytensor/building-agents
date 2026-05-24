@@ -1,6 +1,6 @@
 # Episode 4 — Planning + Think — Spec
 
-What changed between Episode 3 and Episode 4 — both the agent itself (`code/episodes/04-planning-reflection/agent.py`) and the toy codebase state in `code/episodes/04-planning-reflection/initial/`.
+What changed between Episode 3 and Episode 4 — both the agent itself (`code/episodes/04-planning-reasoning/agent.py`) and the toy codebase state in `code/episodes/04-planning-reasoning/initial/`.
 
 For the narrative producer brief and the empirical comparison: see `tmp/video-creation-notes/episode-04.md`.
 
@@ -179,7 +179,7 @@ With the feature unimplemented (baseline state), this fixture fails — `[text][
 
 Per the convention established in this series: **each episode's `initial/` is the prior episode's "successful completion" state.**
 
-`code/episodes/04-planning-reflection/initial/` = a copy of Ep 3's successful sandbox output (ASTNode rename applied, all Ep 3 tests passing) **plus the reference_style_links fixture pair.**
+`code/episodes/04-planning-reasoning/initial/` = a copy of Ep 3's successful sandbox output (ASTNode rename applied, all Ep 3 tests passing) **plus the reference_style_links fixture pair.**
 
 The agent's job is to implement the feature so all 44 tests pass.
 

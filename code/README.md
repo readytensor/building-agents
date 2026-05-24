@@ -42,7 +42,7 @@ diff -r initial sandbox
 - **01-loop** — the minimal agent loop with one `bash` tool
 - **02-tools** — multiple primitives + `@tool` helper + skills
 - **03-context** — rolling-summary compaction + done tool
-- **04-planning-reflection** — plan step + reflect step
+- **04-planning-reasoning** — `write_plan` (structured plan in agent state) + `think` (in-the-moment reasoning scratchpad)
 - **05-orchestration** — multi-agent + `delegate`
 
 ## Provider portability

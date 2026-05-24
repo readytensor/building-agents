@@ -23,7 +23,7 @@ The worked example is a **coding agent**. It's the cleanest domain to teach in: 
 | 1   | **The Loop**              | What is an agent?                           | A working agent the viewer can run and modify today                   |
 | 2   | **Tools**                 | How does it actually do things?             | An agent with real capabilities; intuition for tool design            |
 | 3   | **Context**               | Why does it get worse on longer tasks?      | The most important practical insight in the series                    |
-| 4   | **Planning & Reflection** | Why does it spiral — and how do you fix it? | A more robust agent; architecture intuitions that transfer everywhere |
+| 4   | **Planning & Reasoning**  | What does it cost to make the agent legible? | Two reasoning-strategy tools — and an honest cost result that recasts what planning is for |
 | 5   | **Orchestration**         | When is one agent the wrong shape?          | A clear framework for when multi-agent adds value vs. overhead        |
 
 Each episode follows the same internal rhythm: **one question, one limitation, one addition (in code), one before/after, one abstraction** — closing with "this is the same pattern real systems use, just with more machinery."
@@ -40,7 +40,7 @@ Each episode follows the same internal rhythm: **one question, one limitation, o
 **Light-touch concern:** A 5-line `SandboxContext` bounding `bash` to a working directory. Acknowledged on screen, not the focus.
 **Task:** Point the agent at a small unfamiliar directory and ask it to explain what the code does. Multiple chained `bash` calls; concrete output the viewer can see.
 **Closing abstraction:** This is what Claude Code is doing right now in your terminal — same loop, more machinery.
-**Cliffhangers seeded:** Naive stop condition (returns in Ep 3), repetitive tool-schema definitions (cleaned in Ep 2), no history management (Ep 3), no planning (Ep 4).
+**Cliffhangers seeded:** Naive stop condition (returns in Ep 3), repetitive tool-schema definitions (cleaned in Ep 2), no history management (Ep 3), no planning or in-the-moment reasoning tool (Ep 4).
 
 ### Episode 2 — Tools
 
@@ -63,14 +63,15 @@ These two are paired because both serve the same theme: _making long-running tas
 **Closing abstraction:** Agent capability is mostly context quality, not prompt cleverness. Performance is downstream of what the model can see, not what you told it at the start.
 **Cliffhangers seeded:** Even with managed context, the agent can still run in circles, hallucinate progress, or drift off-task — different class of failure, addressed next.
 
-### Episode 4 — Planning & Reflection
+### Episode 4 — Planning & Reasoning
 
-**Question:** Why does it spiral — and how do you fix it?
-**Limitation framed:** Failure gallery — runaway loops, hallucinated progress, scope drift. Each failure is shown concretely on a real task, then traced to a specific architectural gap.
-**Addition (code):** A lightweight **plan step** before the loop (agent writes a TODO list / scratchpad it can refer to and revise), and a **reflect step** triggered on tool error or repeated identical calls (forces the agent to pause and reconsider rather than charge ahead).
-**Task:** A task that exposes the failures of the naive agent — flaky test debugging or an ambiguous "make this work" goal. The fixed agent handles it; the unfixed one visibly spirals.
-**Closing abstraction:** These additions cost latency and introduce their own failure modes (over-planning, infinite reflection). The engineering is knowing when to gate them. Every production agent system has a planning layer and a reflection layer; the question is always _what's the smallest version that earns its keep_.
-**Cliffhangers seeded:** One agent is now robust but still a bottleneck for tasks with conflicting responsibilities or genuine parallelism.
+**Question:** What does it cost to make the agent legible — and what does that buy you?
+**Limitation framed:** The Ep 3 agent works but its mid-flight intent is opaque. To know what it's trying to do you have to read every tool call. On long autonomous runs that's untenable.
+**Addition (code):** Two reasoning-strategy tools. **`write_plan(steps)`** — a Claude Code TodoWrite-style structured plan that lives in agent state (not message history) and is injected into the system prompt each iteration, persisting across compaction. **`think(thought)`** — a no-op tool that echoes back, forcing the model to externalize reasoning before action. The two have distinct purposes (state vs scratchpad), encoded in their `@tool` descriptions.
+**Task:** A multi-step feature add — implementing reference-style markdown link support across the lexer, parser, renderer, and extension registry. Genuinely benefits from forward planning; a fair test of whether planning helps.
+**Headline empirical result:** On this task, planning + think made the agent **more expensive**, not cheaper (+49% cost vs the Ep 3 baseline; +74% iterations). The intuitive "think before acting → fewer wasted steps" hypothesis is falsified. The episode lands this honestly.
+**Closing abstraction:** Planning is a **legibility tax**, not a speedup. You pay more so a human (or another agent) can read the agent's intent before it acts. Worth it on long autonomous runs where supervision matters; net cost on short tasks. Reflection (loop detection that injects a "reconsider" prompt) was tried in development and cut — false positives dominated, no real spirals caught.
+**Cliffhangers seeded:** The done()-reliability gap from Ep 3 is now *visible* — the structured plan ends with unchecked steps next to the agent's "I'm done" text. One agent is still a bottleneck for tasks with conflicting responsibilities or genuine parallelism. Both threads continue into Ep 5.
 
 ### Episode 5 — Orchestration
 
@@ -87,15 +88,15 @@ These two are paired because both serve the same theme: _making long-running tas
 |                | Ep 1                    | Ep 2                            | Ep 3                           | Ep 4                                   | Ep 5                        |
 | -------------- | ----------------------- | ------------------------------- | ------------------------------ | -------------------------------------- | --------------------------- |
 | Loop           | naive `while`           | same                            | same                           | same                                   | same                        |
-| Tools          | `bash`                  | `bash`, `read`, `write`, `grep` | + (no new tools)               | + planning/reflection scratchpad tools | + `delegate`                |
+| Tools          | `bash`                  | `bash`, `read`, `write`, `grep` | + (no new tools)               | + `write_plan` + `think`               | + `delegate`                |
 | Tool schemas   | hand-written            | `@tool` helper                  | same                           | same                                   | same                        |
 | Stop condition | no tool calls → break   | same                            | **`done()` / `TaskComplete`**  | same                                   | same                        |
 | History        | raw list                | raw list                        | **rolling-summary compaction** | same                                   | per-agent                   |
-| Planning       | none                    | none                            | none                           | **plan + reflect**                     | inherited                   |
+| Planning       | none                    | none                            | none                           | **plan + think (reflect tried, cut)**  | inherited                   |
 | Agents         | 1                       | 1                               | 1                              | 1                                      | **N (planner + executors)** |
 | Sandbox        | 5-line `SandboxContext` | same                            | same                           | same                                   | same                        |
 
-By Ep 5, the code is a recognizable _minimal subset_ of the architectural pattern that powers production agent systems — loop, tools, compaction, done tool, planning/reflection, orchestration — with all the production scaffolding deliberately removed.
+By Ep 5, the code is a recognizable _minimal subset_ of the architectural pattern that powers production agent systems — loop, tools, compaction, done tool, planning + reasoning tools, orchestration — with all the production scaffolding deliberately removed.
 
 ---
 
@@ -107,7 +108,7 @@ By Ep 5, the code is a recognizable _minimal subset_ of the architectural patter
 
 ### In scope (changes the agent's shape)
 
-- The loop, tools, history management, stop conditions, planning/reflection, multi-agent topology.
+- The loop, tools, history management, stop conditions, planning and in-the-moment reasoning, multi-agent topology.
 
 ### Light touch only (acknowledged when it can't be ignored)
 
@@ -182,7 +183,7 @@ Why this fits the series:
 | 1   | Explore the repo and explain what it does                                                                                         | Multiple chained `bash` calls; loop is visibly iterating                             |
 | 2   | Fix a planted bug (e.g., lexer mishandles escaped backticks)                                                                      | Needs read + edit + run pytest — earns multi-tool design                             |
 | 3   | Refactor across modules (e.g., rename `Token` → `Node` across lexer/parser/renderer/tests; or change an extension hook signature) | Long history of file contents naturally fills context; agent visibly loses thread    |
-| 4   | Debug an ambiguous failure (e.g., "tables inside nested lists render wrong" — cause could be lexer, parser, or renderer)          | Naive agent spirals; planning + reflection get it through                            |
+| 4   | Add reference-style markdown link support — feature-add that touches lexer + parser + renderer + extension registry              | Multi-step structure where a human would naturally plan; fair test of "does planning help?" (empirical answer: cost goes up, legibility is what you actually buy) |
 | 5   | Add LaTeX as a second output format                                                                                               | Touches CLI flag, new renderer, possibly extension hooks, tests — real decomposition |
 
 ### Spec
@@ -191,7 +192,8 @@ Why this fits the series:
 - **Per-episode specs** (define what changes from the previous episode — agent additions and `initial/` state divergences):
   - **Episode 2:** [`spec/episode-02.md`](./spec/episode-02.md) — adds 4 tools + `@tool` decorator; plants escaped-backtick bug in parser.py; adds `escaped_backticks` fixture pair.
   - **Episode 3:** [`spec/episode-03.md`](./spec/episode-03.md) — adds done tool + rolling-summary compaction (~50 LOC); task is renaming `Node` → `ASTNode` across 5 files / 58 occurrences; `initial/` is clean (no planted modifications). Includes a non-negotiable 4-step verification procedure (pytest + case-sensitive grep counts + diff). **Implemented + 7 trajectories captured + producer brief written.** Parameter sweep revealed a "hallucinated success" failure mode at aggressive compaction settings (5K threshold + Keep 2) — the agent confidently calls `done()` while leaving the task half-finished. This is the bridge to Ep 4.
-  - Episodes 4–5: to be written as each is prepared.
+  - **Episode 4:** [`spec/episode-04.md`](./spec/episode-04.md) — adds `write_plan` (TodoWrite-style structured plan in agent state, injected into the system prompt) + `think` (no-op echo for externalized reasoning). Reflection was tried and cut. Task: implement reference-style markdown links across the markdown pipeline. **Implemented + recorded baseline-vs-planning A/B + producer brief written.** Headline finding: planning + think made the agent +49% more expensive, +74% more iterations, with the same end result — recasting planning as a "legibility tax" rather than a speedup.
+  - Episode 5: to be written when prepared.
 
 ---
 
@@ -223,7 +225,7 @@ agents-from-first-principles/        # public companion repo
     │   └── README.md                # how to run, env vars expected
     ├── 02-tools/
     ├── 03-context/
-    ├── 04-planning-reflection/
+    ├── 04-planning-reasoning/
     └── 05-orchestration/
 ```
 
@@ -289,7 +291,7 @@ building-agents/
 │       ├── 01-loop/{agent.py, README.md, initial/}
 │       ├── 02-tools/{agent.py, README.md, initial/}
 │       ├── 03-context/{agent.py, README.md, initial/}
-│       ├── 04-planning-reflection/{agent.py, README.md, initial/}
+│       ├── 04-planning-reasoning/{agent.py, README.md, initial/}
 │       └── 05-orchestration/{agent.py, README.md, initial/}
 └── tmp/                                   # reference material — NOT the deliverable
     ├── about-clyep/                       # Clyep brand, ICP, production strengths
