@@ -323,7 +323,7 @@ Implementation order will be: `python -c "import shutil; shutil.copytree('../01-
 
 ## 11. Out of scope for this episode
 
-- **Planning / reflection.** Both arrive in Ep 4.
+- **Planning and in-the-moment reasoning tools.** Both arrive in Ep 4. (Reflection was originally going to be Ep 4's other addition; cut during implementation after trials produced false positives without catching real spirals.)
 - **Ephemeral messages.** We picked compaction over ephemeral earlier; sticking with that.
 - **Multi-agent / delegation.** Stays out until Ep 5.
 - **Pydantic-model tool parameters.** Stays out of the series.

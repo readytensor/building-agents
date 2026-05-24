@@ -290,7 +290,7 @@ Reaffirming, in case the implementation drifts:
 
 - **Done tool / `TaskComplete`.** Stays out until Ep 3.
 - **Compaction.** Stays out until Ep 3.
-- **Planning / reflection.** Stays out until Ep 4.
+- **Planning and in-the-moment reasoning tools.** Stay out until Ep 4. (Reflection was originally going to be Ep 4's other addition; cut during implementation.)
 - **Multi-agent / delegation.** Stays out until Ep 5.
 - **Pydantic-model tool parameters, Annotated/Depends.** Stays out of the series entirely (architectural focus, not framework features).
 - **CLI-session REPL wrapping.** Acknowledged in ~30 sec, not implemented as canonical code.
