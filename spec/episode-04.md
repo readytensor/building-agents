@@ -1,8 +1,10 @@
-# Episode 4 — Planning & Reflection — Spec
+# Episode 4 — Planning + Think — Spec
 
-What changes between Episode 3 and Episode 4 — both the agent itself (`code/episodes/04-planning-reflection/agent.py`) and the toy codebase state in `code/episodes/04-planning-reflection/initial/`.
+What changed between Episode 3 and Episode 4 — both the agent itself (`code/episodes/04-planning-reflection/agent.py`) and the toy codebase state in `code/episodes/04-planning-reflection/initial/`.
 
-For the narrative producer brief: see `tmp/video-creation-notes/episode-04.md` (to be written after implementation + recorded runs).
+For the narrative producer brief and the empirical comparison: see `tmp/video-creation-notes/episode-04.md`.
+
+> **Spec lineage note:** an earlier draft of this spec described a tables-in-lists bug-fix task and a reflection-loop tool. Implementation pivoted away from both. The task became reference-style markdown link support (feature-add, not bug-fix), and reflection was dropped after trial runs showed loop-detection produced mostly false positives without catching real spirals. This spec now matches what was built and recorded.
 
 ---
 
@@ -10,352 +12,267 @@ For the narrative producer brief: see `tmp/video-creation-notes/episode-04.md` (
 
 ### Task given to the agent
 
-A realistic engineer's bug report — paste-and-ask, same convention as Eps 2 and 3:
+A realistic engineer's request — paste-and-ask, same convention as Eps 2 and 3:
 
 ```python
-TASK = """I'm seeing this when I run pytest in this repo:
+TASK = """I want to add support for reference-style links to our markdown
+library. They look like this:
 
-FAILED tests/test_renderer.py::test_fixture_pair[tables_in_lists]
-AssertionError: rendered HTML doesn't match expected.
-See tests/fixtures/tables_in_lists.md / tables_in_lists.html for the input
-and what the output should be.
+    Here is a [link][myref] in text.
 
-Can you figure out what's wrong and fix it?"""
+    [myref]: https://example.com "Optional title"
+
+The link definitions (the `[id]: url "title"` lines) get collected from
+the document, and inline `[text][id]` references resolve to <a> elements
+using those URLs. The definition lines themselves should NOT appear in
+the rendered output.
+
+I've added a test fixture at tests/fixtures/reference_style_links.md and
+tests/fixtures/reference_style_links.html showing the expected behavior.
+Right now pytest fails on it because the feature isn't implemented.
+
+Can you add reference-style links? Make sure all other tests still pass."""
 ```
 
-### Success criterion — 4-step verification (same shape as Ep 3 §6)
+### Why this task (not a bug fix)
 
-1. `pytest` returns N passed / 0 failed (N = baseline count after we add the new fixture).
-2. The fix is in source code, not in the fixture (the agent didn't "fix" the test by altering expected output).
-3. `diff -r initial sandbox` shows changes only in the expected file(s) — the agent didn't refactor unrelated code on the way.
-4. The agent called `done()` after verifying.
+- **Multi-step structure makes planning's value plausible *a priori*.** Implementation touches lexer (detect `[id]:` definition lines), parser inline pass (recognize `[text][id]` references with deferred resolution), renderer (emit `<a>` from the resolved target), and the extension registry. Each step depends on understanding prior pipeline stages. This is the shape of work where a human would naturally plan.
+- **Genuine feature add, not a bug fix.** Bug fixes are short and reactive — they don't reward forward thinking. Feature adds do. The right shape of work to *fairly test* "does planning help?"
+- **Real verification target.** The test fixture pair is the unambiguous oracle. No subjective evaluation of "did it implement the feature."
 
-All four must pass for a recorded run to count as successful.
+### Success criterion — 4-step verification
+
+```bash
+# 1. Tests pass (baseline 43 + the new fixture)
+pytest -q                                                # → "44 passed"
+
+# 2. The implementation is in source, not in the fixture
+diff initial/tests/fixtures/reference_style_links.html \
+     sandbox/tests/fixtures/reference_style_links.html   # → no changes
+
+# 3. Diff scope — agent only touched the markdown pipeline
+diff -r initial sandbox                                  # → changes only in md2html/extensions/,
+                                                         #   __init__.py, optionally renderer
+
+# 4. The agent called done()
+grep "=== TASK COMPLETE ===" <run.log>                   # → match
+```
+
+**Recorded reality:** criterion 4 failed in **both** recorded runs (Ep 3 baseline AND Ep 4 with planning). Both ended via naive stop with a free-text "I'm done" response. The done()-reliability gap is documented as the bridge to Ep 5 — see the producer brief and the auto-memory at `feedback_done_reliability_overdue.md`.
 
 ---
 
-## 2. The planted defect — "tables inside nested list items render wrong"
+## 2. The two new tools
 
-A test fixture where a Markdown table appears inside a list item. The expected HTML has the table as an `<table>...</table>` element. The bugged output produces literal pipe characters (the table tokenizer doesn't fire inside list-item content).
+### 2a. `write_plan(steps)` — structured plan tool
 
-### Why this bug
-
-- **Genuinely ambiguous root-cause location.** Plausible candidates:
-  - **Lexer** — table tokenizer not invoked when scanning list-item body lines.
-  - **Parser** — list-item content not re-tokenized through extension hooks.
-  - **Tables extension** (`extensions/tables.py`) — `tokenize_block` hook gated to top-level blocks only.
-- **Failure is visible** — the diff between expected `<table>...</table>` and actual `<p>| col1 | col2 |</p>` is unmissable.
-- **Investigation is non-trivial** — the agent has to read the extension protocol in `extensions/__init__.py`, understand how `tokenize_block` is dispatched, trace where it's called from in the lexer/parser.
-- **Forces multi-hypothesis thinking** — the agent could plausibly start fixing the wrong module first, find that "fix" doesn't work, need to back up and reconsider. **That's exactly what reflection is for.**
-
-### Where the bug actually lives (the canonical plant point)
-
-The bug is in **`md2html/extensions/tables.py`** — specifically, the `tokenize_block` hook is gated by a check that only fires at top-level block scanning, not when called from inside list-item content re-parsing.
-
-But the agent shouldn't be told this. The agent must investigate and narrow it down.
-
-### Open item to confirm during implementation
-
-The current `md2html` codebase may not actually support tables inside list items as a working feature — meaning we may need to **first add baseline support, then plant the bug**. To be confirmed when we build Ep 4's `initial/`. If the codebase doesn't naturally support tables-in-lists, two paths:
-
-- **Add the feature, then plant the regression** — more setup work, cleanest narrative ("this used to work, now it's broken").
-- **Pick a different ambiguous bug** — e.g., "code block inside a list item loses its language class" or "footnote definition inside a blockquote renders wrong." Same pedagogical shape, possibly simpler baseline.
-
-To be settled at implementation time.
-
----
-
-## 3. New test fixture
-
-A new pair of files under `tests/fixtures/`:
-
-### `tests/fixtures/tables_in_lists.md`
-
-```markdown
-Here's a list with a table inside one of the items:
-
-- First item, regular text.
-- Second item containing a table:
-
-  | col1 | col2 |
-  |------|------|
-  | a    | b    |
-  | c    | d    |
-
-- Third item, back to regular text.
-```
-
-### `tests/fixtures/tables_in_lists.html`
-
-Expected output (table renders inside the list item):
-
-```html
-<p>Here's a list with a table inside one of the items:</p>
-<ul>
-<li>First item, regular text.</li>
-<li>Second item containing a table:
-<table>
-<thead><tr><th>col1</th><th>col2</th></tr></thead>
-<tbody>
-<tr><td>a</td><td>b</td></tr>
-<tr><td>c</td><td>d</td></tr>
-</tbody>
-</table>
-</li>
-<li>Third item, back to regular text.</li>
-</ul>
-```
-
-(Exact HTML formatting will be finalized when we verify the baseline's output style.)
-
-With the bug present, **only this test fails**. All previously-passing tests still pass.
-
----
-
-## 4. The two paired additions
-
-### 4a. The planning tool (`write_plan`)
-
-A Claude Code-style TodoWrite-equivalent. Tool-based, with persistent context injection.
+A Claude Code TodoWrite-equivalent. State-bearing.
 
 ```python
-class PlanStep(TypedDict):
-    content: str          # description of the step
-    status: str           # "pending" | "in_progress" | "completed"
-
-
-# Module-level state — the canonical plan, mutated by the tool.
-CURRENT_PLAN: list[PlanStep] = []
-
+CURRENT_PLAN: list[dict] = []   # module-level state; mutated by the tool
 
 @tool(
-    "Set or update the working plan. Pass the FULL current state of the plan as "
-    "a list of steps, each with content and status. Use this to enumerate "
-    "subtasks, track progress, and revise the plan when you learn something new."
+    "Set or update your working plan for a MULTI-STEP TASK. Pass the FULL "
+    "current state of the plan as a list of steps. Each step is either a "
+    "string OR a dict with 'content' (string) and 'status' (one of "
+    "'pending', 'in_progress', 'completed'). Call this at the start of a "
+    "multi-step task and again whenever you complete a step or revise your "
+    "approach. The plan is always visible to you in subsequent iterations. "
+    "USE THIS FOR: tracking progress through multiple distinct subtasks. "
+    "NOT FOR: in-the-moment reasoning about a single hard problem — for that, "
+    "use the `think` tool."
 )
-def write_plan(steps: list[dict]) -> str:
-    CURRENT_PLAN.clear()
-    CURRENT_PLAN.extend(steps)
-    return _format_plan(CURRENT_PLAN)
+def write_plan(steps) -> str:
+    # defensive parsing: model sometimes passes a JSON-encoded string
+    # instead of a list, or strings inside the list instead of dicts.
+    # Recover gracefully — see implementation in agent.py.
+    ...
 ```
 
-The plan is **injected into context on every LLM call** as a `role="user"` message inserted just before the call (and removed afterward to avoid polluting message history):
+### 2b. `think(thought)` — externalized-reasoning tool
+
+A no-op echo. Stateless. Forces the model to write a reasoning paragraph before the next action.
 
 ```python
-def _inject_plan_into_messages(messages: list[dict]) -> list[dict]:
-    if not CURRENT_PLAN:
-        return messages
-    plan_msg = {
-        "role": "user",
-        "content": f"[CURRENT PLAN]\n{_format_plan(CURRENT_PLAN)}\n[end plan]",
-    }
-    # Insert just before the most recent user/assistant exchange so it stays fresh
-    return messages + [plan_msg]
+@tool(
+    "Externalize your reasoning about a hard problem or decision. Pass a "
+    "thought as a string; it is echoed back unchanged. The act of writing "
+    "the thought out forces explicit reasoning before action. "
+    "USE THIS FOR: weighing alternative approaches before choosing one, "
+    "reasoning through a tricky edge case, untangling a confusing problem. "
+    "NOT FOR: tracking multi-step task progress — for that, use `write_plan`."
+)
+def think(thought: str) -> str:
+    return thought
 ```
 
-**Why persistent injection (and not just adding to messages)**: compaction would otherwise eventually summarize the plan away. By injecting from agent state each call, the plan is always current and complete, regardless of compaction.
+**The two-tool framing matters.** Their `@tool` descriptions are doing real work — pointing the model to the right tool for the right mode. `write_plan` for *state*; `think` for *scratchpad*. We confirmed the distinction holds empirically — see recorded run F: `write_plan` fired exactly once at the start; `think` fired 9 times across the run for in-the-moment judgments.
 
-**~30 LOC** of new code total: the tool, the injection helper, the state variable.
+### 2c. The plan-injection mechanism (load-bearing)
 
-### 4b. Reflection — loop-based, two triggers
-
-Reflection is NOT a tool. The agent loop detects trigger conditions and injects a user message that forces the model to reflect on the next iteration.
-
-**Trigger 1: Tool returned an error.**
+`CURRENT_PLAN` is injected into the **system prompt** each call, as a SEPARATE text block appended AFTER the cached base system text:
 
 ```python
-def _looks_like_error(tool_result: str) -> bool:
-    return tool_result.startswith("Error executing") or tool_result.startswith("Error:")
+def _system_cached():
+    base = {"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}
+    if CURRENT_PLAN:
+        plan_block = {
+            "type": "text",
+            "text": f"\n\n[CURRENT PLAN]\n{_format_plan(CURRENT_PLAN)}\n[end plan]",
+        }
+        return [base, plan_block]
+    return [base]
 ```
 
-When detected, after appending the tool result, inject:
+**This placement is load-bearing.** An earlier implementation injected the plan into the message list (appended as a text block to the last user message of each call). That broke prompt caching catastrophically: the "last user message" position changes every iter, so the plan text effectively moves each turn, invalidating any cached entry at that position. Caching costs went *up*, not down, vs no caching at all (1.25× write premium paid per iter with no read benefit).
 
-```
-[REFLECT] That tool call failed. Briefly reflect on what went wrong, then try a different approach.
-```
+Putting the plan in system instead keeps the message prefix byte-stable, lets the static-vs-dynamic split inside system handle plan changes cleanly (base text cached forever; plan addendum re-pays only when the plan changes), and survives compaction. **For Ep 5 and any future agent-loop work in this series: dynamic per-call state goes in system, not messages.** See the auto-memory at `feedback_prompt_cache_prefix_stability.md`.
 
-**Trigger 2: Loop detected — same tool, same args, in the last N=5 iterations.**
+### 2d. What we did NOT add (reflection)
 
-```python
-def _is_likely_loop(call_signature, recent_signatures, window=5):
-    if _is_known_verification_pattern(call_signature):
-        return False  # bash("pytest") and similar — don't trigger
-    return call_signature in recent_signatures[-window:]
-```
+The original spec included a loop-based reflection mechanism — the loop detects "tool error" or "repeated tool call with same args" and injects a `[REFLECT] ...` user message to force the model to step back and reconsider.
 
-When detected, inject:
+We built it, ran trials, and dropped it. Findings:
+- **False positives dominated.** Legitimate verification reruns (`bash("pytest")` called repeatedly as the agent makes progress) were mis-flagged as spirals.
+- **Real spirals weren't caught.** The agent's failure mode on the recorded runs wasn't repeated tool calls — it was over-confident summarization (the Ep 3 "hallucinated success" pattern in a different form).
+- **Added noise without value.** Net cost per run went up; trajectory quality didn't measurably improve.
 
-```
-[REFLECT] You just called this with the same arguments earlier. Step back — are you
-stuck in a loop? Reflect on whether the current approach is working, then try
-something different.
-```
-
-**Known false-positive case acknowledged.** When the agent is legitimately running the same command repeatedly because something happens between calls (e.g., a migration script that tracks its own state), the heuristic will fire. The cost is one extra LLM call where the agent says "I'm intentionally iterating, continuing." Acceptable.
-
-**Implementation: ~25 LOC** — the helper functions, a `recent_signatures` deque, the injection logic in the loop.
-
-### Combined LOC for Ep 4 additions
-
-- Planning: ~30 LOC
-- Reflection: ~25 LOC
-- **Total: ~55 LOC** added to Ep 3's agent.
-
-Ep 3 was ~280 LOC. Ep 4 will be **~335 LOC**.
+The episode acknowledges reflection as a cut, but doesn't show or build it. The remaining two-tool framing (`write_plan` + `think`) is cleaner pedagogically and matches what the recorded runs actually used.
 
 ---
 
-## 5. Initial state for Ep 4 — inheriting Ep 3's output
+## 3. The test fixture
+
+Two new files under `tests/fixtures/`:
+
+### `tests/fixtures/reference_style_links.md`
+
+```markdown
+This is a [paragraph][example] with a reference-style link.
+
+Here is [another link][example] using the same reference.
+
+And one [more][different] using a different reference.
+
+The references themselves don't appear in the rendered output.
+
+[example]: https://example.com "Example site"
+[different]: https://example.org/foo
+```
+
+### `tests/fixtures/reference_style_links.html`
+
+Expected output:
+
+```html
+<p>This is a <a href="https://example.com" title="Example site">paragraph</a> with a reference-style link.</p>
+<p>Here is <a href="https://example.com" title="Example site">another link</a> using the same reference.</p>
+<p>And one <a href="https://example.org/foo">more</a> using a different reference.</p>
+<p>The references themselves don't appear in the rendered output.</p>
+```
+
+With the feature unimplemented (baseline state), this fixture fails — `[text][id]` is rendered as literal bracketed text and the `[id]: url` definition lines appear as paragraphs.
+
+---
+
+## 4. Initial state for Ep 4
 
 Per the convention established in this series: **each episode's `initial/` is the prior episode's "successful completion" state.**
 
-`code/episodes/04-planning-reflection/initial/` = a copy of `code/episodes/03-context/_sandbox_from_runA/` (the literal output of Ep 3 Run A — Node renamed to ASTNode across 5 files, 43 tests pass) **plus the new `tables_in_lists` fixture pair and the planted bug.**
+`code/episodes/04-planning-reflection/initial/` = a copy of Ep 3's successful sandbox output (ASTNode rename applied, all Ep 3 tests passing) **plus the reference_style_links fixture pair.**
 
-### Concretely, the setup steps when we build it
+The agent's job is to implement the feature so all 44 tests pass.
 
-1. Run the Ep 3 agent against the Ep 3 task one final time to produce a clean "Ep 3 done" sandbox (or use the existing Run A output if still on disk).
-2. Copy that sandbox → `code/episodes/04-planning-reflection/initial/`.
-3. Verify baseline: `pytest` shows 43/43 pass, `grep '\bNode\b' md2html/` returns 0.
-4. Plant the bug in `extensions/tables.py` per §2.
-5. Add `tables_in_lists.md` / `.html` fixture pair.
-6. Re-verify: 43 pass + 1 fail (only `tables_in_lists`).
-
-The agent's job is then exactly the same shape as Ep 3 (a failing test, find and fix) but **with an ambiguous root cause** that exercises the new planning + reflection mechanisms.
+Setup steps (already done at commit `9a6e4f2`):
+1. Start from Ep 3 successful sandbox.
+2. Add `tests/fixtures/reference_style_links.md` and `.html`.
+3. Confirm baseline: pytest shows 43 pass + 1 fail (only `reference_style_links`).
 
 ---
 
-## 6. The failure demo — Ep 3 agent on Ep 4 task
+## 5. What changes in `agent.py` vs Ep 3
 
-The episode's narrative arc requires showing the Ep 3 agent **struggling** on this task — likely succeeding eventually, but visibly inefficient, with signs of the failure modes (charging in wrong, having to back up).
+### Added (~50 LOC)
+- `CURRENT_PLAN: list[dict] = []` — module-level plan state.
+- `_format_plan(plan)` — render plan as a checklist string.
+- `@tool write_plan(steps)` — set/replace the plan, with defensive parsing for the model's quirks (string-vs-list, JSON-string).
+- `@tool think(thought)` — no-op echo.
+- `_system_cached()` — returns `[base_text_block_with_cache_control, plan_block_without_cache_control]` when a plan exists, otherwise just the base.
+- `write_plan` and `think` added to `TOOLS` registry.
+- Per-iteration counters for `write_plan` and `think` calls (recorded in the final usage summary).
 
-**Expected Ep 3-agent behavior on the ambiguous bug:**
+### Changed from Ep 3
+- System prompt: NO change. (Tool descriptions carry the framing.)
+- Compaction-trigger threshold check: now uses `input_tokens + cache_read + cache_write` instead of just `input_tokens`, because with caching enabled the raw `input_tokens` field is only the uncached delta and would never cross the threshold.
 
-- Reads the fixture pair, sees expected vs actual.
-- Charges into ONE module first (often the most "obvious" candidate, which may not be where the bug is).
-- Tries a fix, runs pytest, sees it still fails.
-- Tries another fix in the same module, still fails.
-- Eventually backs up, considers another module.
-- May or may not succeed within MAX_ITERATIONS (150).
+### Temporarily swapped (dev-time only)
+- **LLM SDK**: native Anthropic SDK with prompt caching, instead of the locked `openai` package against Chat Completions. See [[feedback-use-openai-sdk]] in memory and the header docstring in `agent.py`. **Will be translated back before the companion code ships.**
 
-If the Ep 3 agent succeeds, it'll take **many more iterations than necessary** because it lacks structured hypothesis-tracking. If it fails or hallucinates completion, the failure case lands even harder.
+### Unchanged from Ep 3
+- Sandbox reset, `@tool` decorator, all 5 working tools (bash/read/write/edit/grep), `done` + `TaskComplete`, `compact()` function, `MAX_ITERATIONS` safety cap.
 
-**The "after" — Ep 4 agent on same task:**
-
-- First move: `write_plan(["Investigate lexer for table handling in list contexts", "Investigate parser for list-item content re-parsing", "Investigate tables extension's gating", "Apply fix to identified module", "Verify with pytest"])`.
-- Works through the plan systematically. Marks each step in_progress, then completed.
-- When a fix attempt fails, reflection triggers (tool error or repeated bash call). Agent says "this hypothesis was wrong, the bug isn't in module X — let me update my plan." Calls `write_plan` again with revised steps.
-- Eventually localizes to the correct module, applies fix, verifies, calls done.
-
-**Expected contrast for the episode**: Ep 3 agent grinds through this in ~40+ iterations with visible thrashing; Ep 4 agent does it in ~25-30 with a visible plan that updates as understanding grows.
-
----
-
-## 7. What changes in `agent.py`
-
-### Diff sketch from Ep 3
-
-**Added:**
-- `CURRENT_PLAN: list[PlanStep] = []` module-level state.
-- `_format_plan(plan)` helper for rendering plan into context.
-- `@tool write_plan(steps)` function.
-- `_inject_plan_into_messages(messages)` helper.
-- `_recent_signatures: deque` for loop detection.
-- `_looks_like_error(result)` helper.
-- `_is_likely_loop(sig, recent)` helper.
-- `_is_known_verification_pattern(sig)` allowlist function.
-- Inside the loop:
-  - After each tool result, check error → inject reflection prompt if needed.
-  - After each tool result, check loop signature → inject reflection prompt if needed.
-  - Before each LLM call, inject the current plan via `_inject_plan_into_messages`.
-- `write_plan` added to `TOOLS` registry.
-
-**Unchanged from Ep 3:**
-- Sandbox reset, LLM client, `@tool` decorator.
-- All five working tools + `done`.
-- `TaskComplete` exception handling.
-- `compact()` function.
-- System prompt (NO change — the plan tool's description tells the agent what to do).
-
-### System prompt: no change
-
-The agent discovers it should use `write_plan` from the tool's description. No system-prompt sentence to add or modify. This stays consistent with our principle that the system prompt evolves at most once across the series (Ep 3 was that change).
+**Total agent.py:** ~330 LOC (Ep 3 was ~280).
 
 ---
 
-## 8. What changes in `initial/`
+## 6. The "before" — Ep 3 agent on the Ep 4 task
 
-Per §5:
+We ran the Ep 3 agent (`_before.py`, which is the Ep 3 code reset to point at the same `initial/`) on the reference-style links task. **It completed the implementation** but did NOT call `done()` — exited via naive stop with a free-text response.
 
-1. Start from Ep 3 Run A's sandbox output (Node → ASTNode rename applied, 43 tests pass).
-2. Add `tests/fixtures/tables_in_lists.md` and `tests/fixtures/tables_in_lists.html`.
-3. Plant the bug in `md2html/extensions/tables.py` (gating issue).
-4. Possibly: add baseline support for tables-in-lists first if not already present (see §2 "open item").
+| Metric | Value |
+|---|---|
+| Iterations | 27 |
+| Compactions fired | 2 |
+| `done()` called | ✗ |
+| Estimated cost @ Sonnet 4.6 | ~$0.61 |
+| Verification | pytest ✓ / source-only ✓ / done() ✗ |
 
-Nothing else changes.
+Linear sequence: explore → read fixtures → read parser → write extension → register → run tests → free-text "done."
 
----
-
-## 9. Verification procedure
-
-Same 4-step shape as Ep 3 §6, adapted:
-
-```bash
-# 1. Tests pass
-cd sandbox && python -m pytest -q
-# Expected: "44 passed in X.XXs"  (43 from Ep 3 + 1 new = 44)
-
-# 2. The fix is in source, not the fixture
-diff initial/tests/fixtures/tables_in_lists.html sandbox/tests/fixtures/tables_in_lists.html
-# Expected: empty (fixture unchanged — agent didn't "fix" the test)
-
-# 3. Diff scope — agent only changed expected files
-diff -r initial sandbox
-# Expected: changes ONLY in md2html/extensions/tables.py (or wherever the bug
-# was localized). Bonus: PLAN-related state isn't in sandbox (plan is in agent
-# memory, not files).
-
-# 4. done() was called
-grep "TASK COMPLETE" run.log
-# Expected: present
-```
-
-Plus instrumentation we want to capture for the producer brief:
-
-- Did `write_plan` actually get used? (count of `> write_plan(...)` in trajectory)
-- How many times was the plan revised? (count of subsequent `write_plan` calls beyond the first)
-- How many reflections fired? (count of `[REFLECT]` injections)
-- For each reflection: tool-error or loop-detection?
-- Iteration count vs Ep 3 agent on same task (the headline contrast)
+Log: `tmp/runs/ep04/runG_before_with_caching.log`.
 
 ---
 
-## 10. Out of scope for this episode
+## 7. The "after" — Ep 4 agent on the same task
 
-- **Multi-agent / delegation.** Stays for Ep 5.
-- **Voluntary `reflect(thought)` tool.** Reflection is loop-imposed, not model-volunteered.
-- **Sophisticated loop detection** (state hashing, progress markers, ML classifier). Simple `(name, args)` exact-match heuristic with verification allowlist is enough. Pedagogical framing on screen: "this is the minimum viable detector; production systems do more."
-- **Pre-`done()` reflection check** (Option C from the design discussion). Could be added later if Runs A/B/C show "hallucinated success" recurring; not in v1.
-- **Voluntary `update_plan_step(idx, status)` tool.** The agent updates the plan by calling `write_plan` again with the full revised list — simpler API, same expressive power.
+| Metric | Ep 3 baseline | Ep 4 (planning + think) | Δ |
+|---|---:|---:|---:|
+| Iterations | 27 | 47 | +74% |
+| `write_plan` calls | – | 1 (at start, never updated) | – |
+| `think` calls | – | 9 (used like a scratchpad) | – |
+| Compactions fired | 2 | 2 | – |
+| Cumulative output tokens | 11,734 | 14,543 | +24% |
+| Cache write tokens | 70,800 | 100,384 | +42% |
+| Cache read tokens | 339,073 | 622,449 | +84% |
+| **Estimated cost** | **~$0.61** | **~$0.91** | **+49%** |
+| `done()` called | ✗ | ✗ | – |
+| Verification | pytest ✓ / source-only ✓ / done() ✗ | pytest ✓ / source-only ✓ / done() ✗ | same |
+
+**Headline finding:** planning + think made the agent **more expensive**, not cheaper. See the producer brief at `tmp/video-creation-notes/episode-04.md` for the full framing and the reframe (planning as a *legibility tax* — useful for human oversight and post-hoc audit, not for speed).
+
+**Side findings:**
+- The agent treats `write_plan` as one-shot decoration, not a living state machine. Calling it just makes a plan visible; it doesn't make the agent maintain one.
+- The agent uses `think` like a scratchpad — roughly 1 in 5 iters has a `think` call before the next action.
+- Caching now works correctly (cache_r:cache_w ratio = 6.2× → reads dominate writes). The earlier broken-caching versions of this run (before the plan-injection fix) had inverted ratios and cost more than the uncached baseline. See [[feedback-prompt-cache-prefix-stability]] in memory.
+
+Log: `tmp/runs/ep04/runF_full_caching_working.log`.
 
 ---
 
-## 11. Implementation order (when we get there)
+## 8. What we explicitly did NOT do (carryover for Ep 5)
 
-1. **Verify or build baseline support for tables-in-lists.** Either confirm md2html handles this natively today, OR add the support code first. Either way, we need a "working baseline" state where the new fixture WOULD pass before we plant the bug.
-2. **Build Ep 4's `initial/`** per §8: copy from Ep 3 Run A's sandbox, add fixture pair, plant bug.
-3. **Verify baseline**: pytest shows 43 + 1 = 44 tests collected, only `tables_in_lists` fails.
-4. **Write `code/episodes/04-planning-reflection/agent.py`** per §7.
-5. **First — record the "before" demo**: run the Ep 3 agent against the Ep 4 task. Capture trajectory, iteration count, success/failure.
-6. **Then — record the "after" demos**: run the Ep 4 agent against the same task 3 times. Capture each per §9 instrumentation.
-7. **If any run fails verification, decide**: re-run (variance), tune trigger conditions, or note as a teaching moment.
-8. **Write the producer brief** (`tmp/video-creation-notes/episode-04.md`).
+- **Multi-agent / delegate.** Stays for Ep 5.
+- **Sophisticated loop detection.** Reflection was tried and dropped; not worth the false-positive cost on this task.
+- **Pre-`done()` reflection check.** Could be added later; not built.
+- **Voluntary `update_plan_step(idx, status)` tool.** The agent updates the plan by calling `write_plan` again with the full revised list — simpler API, same expressive power. (In practice, the model didn't revise the plan at all — see §7 side findings.)
+- **Anti-drift stress test on 200+ iteration runs.** The architectural value of planning (a persistent intent that survives compaction) lives in that regime. We didn't test there. The producer brief notes this honestly.
 
 ---
 
-## 12. Open items to confirm during implementation
+## 9. What Ep 5 inherits
 
-- **Whether the baseline supports tables-in-lists.** §2's open item. Could change the bug choice if too much setup work.
-- **Final loop-detection window N**. Spec says 5; might tune based on Ep 4 runs.
-- **Verification allowlist** for loop detection. Spec says `pytest`, `make test`, `go test` — may need to expand based on what verification commands the agent actually uses.
-- **Whether `write_plan` should require the plan to be non-empty.** Currently allows empty plans (calling with `[]`); maybe error if the agent tries to clear the plan partway through a task?
-- **Where the `[CURRENT PLAN]` injection appears in the message list.** Spec says "appended just before the LLM call" — could also be at the start of the user task or as a system reminder. To be settled when we see how the model responds.
+- The Ep 4 sandbox state at task completion is the natural starting point for Ep 5's `initial/` (per the series convention).
+- The plan-injection mechanism (dynamic state in system, not messages) is the template for any inter-agent state Ep 5 wants to expose.
+- The dev-time SDK swap to native Anthropic + caching applies the same way to Ep 5's `agent.py` (and must be translated back before shipping).
+- The `done()`-reliability gap is now an open item that Ep 5 is well-positioned to address — multi-agent makes "who decides done" structurally sharper. See `feedback_done_reliability_overdue.md` in memory.
+- The task-choice lesson: feature-add gave us a harder task than bug-fix. For Ep 5, pick a task whose natural shape makes multi-agent's value plausible *a priori* — e.g., something with independently-parallelizable subtasks where an orchestrator-plus-worker split would obviously help.
