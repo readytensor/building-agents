@@ -8,7 +8,17 @@
       "PowerShell(Get-Command *)",
       "PowerShell(pip install *)",
       "PowerShell(Test-Path 'C:\\\\Users\\\\abbus\\\\Documents\\\\rt-genai-workflows\\\\video-project-planning\\\\video-projects\\\\building-agents\\\\code\\\\.env'; if \\($env:ANTHROPIC_API_KEY\\) { Write-Output \"ANTHROPIC_API_KEY is set in shell \\($\\([string]$env:ANTHROPIC_API_KEY\\).Length chars\\)\" } else { Write-Output \"ANTHROPIC_API_KEY not set\" })",
-      "PowerShell(if \\($env:OPENAI_API_KEY\\) { Write-Output \"OPENAI_API_KEY is set in shell \\($\\([string]$env:OPENAI_API_KEY\\).Length chars\\)\" } else { Write-Output \"OPENAI_API_KEY not set\" })"
+      "PowerShell(if \\($env:OPENAI_API_KEY\\) { Write-Output \"OPENAI_API_KEY is set in shell \\($\\([string]$env:OPENAI_API_KEY\\).Length chars\\)\" } else { Write-Output \"OPENAI_API_KEY not set\" })",
+      "PowerShell(Get-Process *)",
+      "Bash(git rm *)",
+      "Bash(git restore *)",
+      "Bash(grep -E '\\\\.env$|\\\\.env\\\\.|secrets|credentials')",
+      "Bash(git commit -m ' *)",
+      "PowerShell(python -c \"import anthropic; print\\(anthropic.__version__\\)\")",
+      "WebFetch(domain:docs.anthropic.com)",
+      "PowerShell(Tee-Object *)",
+      "Bash(git check-ignore *)",
+      "Bash(grep -E \"\\\\.env$\")"
     ]
   }
 }

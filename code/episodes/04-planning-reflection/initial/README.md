@@ -1,9 +1,74 @@
-# initial/
+# md2html
 
-Pristine starting state of `md2html` for **Episode 4**.
+A small Markdown-to-HTML CLI tool with a clean three-stage pipeline:
 
-On every run, `../agent.py` deletes `../sandbox/` and copies this directory there. The agent operates on `../sandbox/`.
+```
+markdown text → lexer → tokens → parser → AST → renderer → HTML
+```
 
-**For this episode:** `md2html` as specified, plus **a failing test whose root cause is genuinely ambiguous across modules** (e.g., "tables inside nested lists render wrong" — the bug could legitimately live in the lexer, parser, or renderer). The ambiguity is the point: the naive agent dives into one module and spirals; the planning + reflection mechanisms earn their keep.
+It implements a deliberately small but real subset of Markdown: ATX headings, paragraphs, ordered/unordered (and nested) lists, fenced code blocks, blockquotes, horizontal rules, and the usual inline constructs (emphasis, strong, inline code, links, images, hard breaks).
 
-The specific failure will be decided as part of Episode 4 prep. See [`../../../../spec/md2html.md`](../../../../spec/md2html.md) §8 for forward-looking notes.
+Three optional extensions ship in-tree:
+
+- **tables** — GitHub-flavored pipe tables with column alignment.
+- **code_blocks** — adds the `language-xxx` class on fenced code blocks.
+- **footnotes** — `[^1]` references plus collected definitions at the document end.
+
+## Install
+
+```
+pip install -e .[test]
+```
+
+## Use
+
+```
+md2html INPUT_FILE [-o OUTPUT_FILE] [--stdout]
+        [--no-extensions] [--extensions LIST]
+```
+
+Examples:
+
+```
+md2html README.md                       # writes README.html
+md2html README.md --stdout              # prints to stdout
+md2html post.md --extensions tables     # tables only
+md2html post.md --no-extensions         # core markdown only
+```
+
+Or invoke as a module:
+
+```
+python -m md2html.cli README.md --stdout
+```
+
+## Library use
+
+```python
+from md2html import render
+
+html = render(open("README.md").read())
+```
+
+## Architecture
+
+| Module | Responsibility |
+|---|---|
+| `md2html/lexer.py` | Scan markdown text into a flat stream of block-level tokens. |
+| `md2html/parser.py` | Build an AST from the token stream; do inline parsing. |
+| `md2html/renderer.py` | Visitor-pattern walker producing HTML. |
+| `md2html/extensions/` | Each extension is one file contributing to all three stages. |
+| `md2html/utils.py` | HTML-escape, slugify, whitespace helpers. |
+| `md2html/cli.py` | argparse entry point. |
+
+## Tests
+
+```
+pytest
+```
+
+Tests cover the lexer, the parser, and end-to-end fixture pairs under `tests/fixtures/` (one `*.md` input and one `*.html` expected output per case).
+
+## Scope
+
+This is intentionally a teaching codebase, not a production Markdown engine. The following are **out of scope** by design: HTML pass-through, setext headings, indented code blocks, reference-style links, strikethrough, task lists, autolinks, and math.
