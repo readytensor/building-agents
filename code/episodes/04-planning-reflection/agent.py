@@ -28,7 +28,6 @@ before shipping. See ../../../CLAUDE.md for the locked decision.
 
 See ../../README.md and ../../../spec/episode-04.md for context.
 """
-import hashlib
 import inspect
 import json
 import os
@@ -432,72 +431,15 @@ compactions_fired = 0
 plan_writes = 0
 think_calls = 0
 
-PREV_PREFIX_HASHES = []
-PREV_SYSTEM_HASH = None
-PREV_TOOLS_HASH = None
-
-
-def _check_prefix_stability(system, tools, messages):
-    """Hash system, tools, and each message prefix. Report any divergence
-    from the previous call. If something is mutating earlier content, this
-    will surface it precisely."""
-    global PREV_PREFIX_HASHES, PREV_SYSTEM_HASH, PREV_TOOLS_HASH
-
-    def _h(obj):
-        return hashlib.sha256(
-            json.dumps(obj, sort_keys=True, default=str, separators=(",", ":")).encode()
-        ).hexdigest()[:10]
-
-    sys_h = _h(system)
-    tools_h = _h(tools)
-    rolling = hashlib.sha256()
-    msg_hashes = []
-    for m in messages:
-        rolling.update(
-            json.dumps(m, sort_keys=True, default=str, separators=(",", ":")).encode()
-        )
-        msg_hashes.append(rolling.hexdigest()[:10])
-
-    notes = []
-    if PREV_SYSTEM_HASH is not None and sys_h != PREV_SYSTEM_HASH:
-        notes.append(f"SYSTEM CHANGED ({PREV_SYSTEM_HASH} -> {sys_h})")
-    if PREV_TOOLS_HASH is not None and tools_h != PREV_TOOLS_HASH:
-        notes.append(f"TOOLS CHANGED ({PREV_TOOLS_HASH} -> {tools_h})")
-    if PREV_PREFIX_HASHES:
-        n = min(len(msg_hashes), len(PREV_PREFIX_HASHES))
-        diverged_at = -1
-        for k in range(n):
-            if msg_hashes[k] != PREV_PREFIX_HASHES[k]:
-                diverged_at = k
-                break
-        if diverged_at >= 0:
-            notes.append(
-                f"MSG PREFIX DIVERGED at messages[{diverged_at}] "
-                f"(of {n} comparable, then {len(msg_hashes)-n} new appended)"
-            )
-        else:
-            notes.append(f"prefix stable: {n} msg prior matches, +{len(msg_hashes)-n} new")
-
-    PREV_SYSTEM_HASH = sys_h
-    PREV_TOOLS_HASH = tools_h
-    PREV_PREFIX_HASHES = msg_hashes
-    return "; ".join(notes) if notes else "first call"
-
-
 try:
     while iteration < MAX_ITERATIONS:
         iteration += 1
 
-        system_arg = _system_cached()
-        tools_arg = _tools_cached()
-        stability = _check_prefix_stability(system_arg, tools_arg, messages)
-        print(f"  [stability] {stability}")
-
         resp = client.messages.create(
             model=MODEL,
             max_tokens=MAX_TOKENS,
-            system=system_arg,
-            tools=tools_arg,
+            system=_system_cached(),
+            tools=_tools_cached(),
             messages=messages,
             extra_body={"cache_control": {"type": "ephemeral"}},
         )
