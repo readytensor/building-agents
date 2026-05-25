@@ -248,10 +248,10 @@ Log: `tmp/runs/ep04/runG_before_with_caching.log`.
 | `done()` called | ✗ | ✗ | – |
 | Verification | pytest ✓ / source-only ✓ / done() ✗ | pytest ✓ / source-only ✓ / done() ✗ | same |
 
-**Headline finding:** planning + think made the agent **more expensive**, not cheaper. See the producer brief at `tmp/video-creation-notes/episode-04.md` for the full framing and the reframe (planning as a *legibility tax* — useful for human oversight and post-hoc audit, not for speed).
+**Empirical observation (recorded as engineering data; the producer brief surfaces this as a design consideration, not a dramatic headline):** planning + think made the agent more expensive on this task — ~50% cost increase, 74% more iterations, same result. The naive intuition "think before acting → fewer wasted steps" doesn't hold for short tasks. Worth knowing when a builder decides whether to add planning to their own agent. See the producer brief at `tmp/video-creation-notes/episode-04.md` for the build-decision framing (legibility / anti-drift / auditability as the trade-off you're choosing).
 
-**Side findings:**
-- The agent treats `write_plan` as one-shot decoration, not a living state machine. Calling it just makes a plan visible; it doesn't make the agent maintain one.
+**Side observations:**
+- The agent treats `write_plan` as one-shot decoration, not a living state machine. Calling it just makes a plan visible; it doesn't make the agent maintain one. **A model-behavior data point worth knowing for builders.**
 - The agent uses `think` like a scratchpad — roughly 1 in 5 iters has a `think` call before the next action.
 - Caching now works correctly (cache_r:cache_w ratio = 6.2× → reads dominate writes). The earlier broken-caching versions of this run (before the plan-injection fix) had inverted ratios and cost more than the uncached baseline. See [[feedback-prompt-cache-prefix-stability]] in memory.
 
