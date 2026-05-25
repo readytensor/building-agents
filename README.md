@@ -1,6 +1,6 @@
 # Agents from First Principles
 
-A 5-part technical video series produced by **Clyep**. We build a working coding agent from scratch across the series, using each addition as a lens to examine the real architectural questions: what an agent is, why tools converge on small general primitives, why context matters more than prompts, what fails and why, when structure earns its complexity, and when one agent becomes many.
+A 6-part technical video series produced by **Clyep** (originally planned as 5; extended to 6 after Ep 5 repivoted from multi-agent to skills, and orchestration moved to Ep 6). We build a working coding agent from scratch across the series, using each addition as a lens to examine the real architectural questions: what an agent is, why tools converge on small general primitives, why context matters more than prompts, what fails and why, when structure earns its complexity, and when one agent becomes many.
 
 The canonical original brief is in [`building-agents-series.v1.md`](./building-agents-series.v1.md). This README is the working source of truth — it carries the brief forward with all design decisions made since.
 
@@ -71,32 +71,42 @@ These two are paired because both serve the same theme: _making long-running tas
 **Task:** A multi-step feature add — implementing reference-style markdown link support across the lexer, parser, renderer, and extension registry. Genuinely benefits from forward planning; a fair test of whether planning helps.
 **Headline empirical result:** On this task, planning + think made the agent **more expensive**, not cheaper (+49% cost vs the Ep 3 baseline; +74% iterations). The intuitive "think before acting → fewer wasted steps" hypothesis is falsified. The episode lands this honestly.
 **Closing abstraction:** Planning is a **legibility tax**, not a speedup. You pay more so a human (or another agent) can read the agent's intent before it acts. Worth it on long autonomous runs where supervision matters; net cost on short tasks. Reflection (loop detection that injects a "reconsider" prompt) was tried in development and cut — false positives dominated, no real spirals caught.
-**Cliffhangers seeded:** The done()-reliability gap from Ep 3 is now *visible* — the structured plan ends with unchecked steps next to the agent's "I'm done" text. One agent is still a bottleneck for tasks with conflicting responsibilities or genuine parallelism. Both threads continue into Ep 5.
+**Cliffhangers seeded:** The done()-reliability gap from Ep 3 is now *visible* — the structured plan ends with unchecked steps next to the agent's "I'm done" text. The agent's toolkit is also fixed — every tool sits in the system prompt forever, whether the current task needs it or not. Both threads continue into Eps 5 and 6.
 
-### Episode 5 — Orchestration
+### Episode 5 — Skills
 
-**Question:** When is one agent the wrong shape for a problem?
-**Limitation framed:** A task that genuinely strains the single-agent architecture — context overload, conflicting responsibilities, or parts of the task that benefit from different modes of operation.
-**Addition (code):** A second agent instance with its own system prompt and tool subset; a `delegate(subtask)` tool on the parent that spawns a child; minimal message-passing between them.
-**Task:** A larger task spanning multiple subdirectories or concerns — planner decomposes, executors handle subtasks. The episode also shows where this _doesn't_ help: on a small task, orchestration is just routing overhead.
-**Closing abstraction:** Multi-agent helps when tasks decompose cleanly, when parallelism matters, or when context boundaries are real constraints. When those conditions don't hold, it's overhead. The episode closes with the genuine open questions in the field — coordination failures, trust between agents, context handoffs — rather than pretending they're solved.
+**Question:** How does an agent reach beyond its fixed toolkit without paying for every possible capability up-front?
+**Limitation framed:** Every tool the agent might ever want sits in the system prompt on every API call. Tool descriptions are tokens you're paying for, every turn, whether the tool is relevant to the current task or not. That doesn't scale past a handful of tools.
+**Addition (code):** A **skills system** — composable, lazy-loadable bundles of procedural knowledge + tools, modeled on Claude Code's skill abstraction. Two new always-available tools: `list_skills()` (returns name + description for each available skill — cheap) and `load_skill(name)` (parses the named `SKILL.md`, appends the body to the dynamic system-prompt block, registers any tools the skill provides). A `.skills/<name>/SKILL.md` file format (YAML frontmatter + body). A skill-provided tools registry so that tools only appear in the agent's toolkit when their owning skill is loaded. Ep 4's plan-injection mechanism is extended to also carry loaded-skill bodies.
+**Task:** Add GitHub-flavored alerts (`> [!NOTE]`, etc.) to md2html. The task explicitly directs the agent to check GitHub's docs for the spec — anchoring a `research` skill (web_search + fetch_url) as the demo's load-bearing skill. A `verification` skill ships alongside as a second library entry.
+**Closing abstraction:** Skills shift the agent from "fixed toolkit" to "discoverable on-demand capability library." The base toolkit stays compact; specialized capability arrives on demand, declared in plain markdown. This is the pattern Claude Code and the Agent SDK ship in production.
+
+### Episode 6 — Orchestration
+
+**Question:** When is one agent the wrong shape for a problem — and what does the smallest interesting multi-agent shape look like?
+**Limitation framed:** Three independent subtasks in one ticket all compete for the same context, the same toolset, and the same thread. The agent does them serially even when they don't depend on each other.
+**Addition (code):** A **`delegate(task, agent_type)` tool** that spawns a fresh worker agent with the toolset + skills declared in `.agents/<agent_type>.md`. Ep 5's main loop is refactored into a reentrant `run_agent(task, agent_type)` function used recursively — the orchestrator and every worker run through the same function, parameterized by `AgentConfig`. A `ThreadPoolExecutor` parallel dispatcher: when the orchestrator's assistant turn includes multiple `delegate` tool_use blocks, they fan out concurrently and return results together in the next turn. The orchestrator gets no codebase-mutation tools (no `read`/`write`/`edit`/`bash`/`grep`) — all work goes through workers. A verifier worker has no `write`/`edit` either — role enforced by toolset, not exhortation.
+**Task:** Add three GFM features to md2html at once (strikethrough, task lists, autolinks). Naturally parallelisable; the orchestrator's value is *visible* in the trajectory — three concurrent `delegate` tool_uses in a single turn.
+**Closing abstraction:** Orchestration isn't a new loop. It's Ep 5's loop, recursive, with one new tool and one new config primitive. The orchestrator IS a worker. The mechanism matches what Claude Code and the Agent SDK ship in production (isolated worker context, depth capped at 1, parallel batched-tool-call dispatch). The architecture is complete; what wraps around it — durable execution, guardrails, production ops — is a different series.
 
 ---
 
 ## Code progression at a glance
 
-|                | Ep 1                    | Ep 2                            | Ep 3                           | Ep 4                                   | Ep 5                        |
-| -------------- | ----------------------- | ------------------------------- | ------------------------------ | -------------------------------------- | --------------------------- |
-| Loop           | naive `while`           | same                            | same                           | same                                   | same                        |
-| Tools          | `bash`                  | `bash`, `read`, `write`, `grep` | + (no new tools)               | + `write_plan` + `think`               | + `delegate`                |
-| Tool schemas   | hand-written            | `@tool` helper                  | same                           | same                                   | same                        |
-| Stop condition | no tool calls → break   | same                            | **`done()` / `TaskComplete`**  | same                                   | same                        |
-| History        | raw list                | raw list                        | **rolling-summary compaction** | same                                   | per-agent                   |
-| Planning       | none                    | none                            | none                           | **plan + think (reflect tried, cut)**  | inherited                   |
-| Agents         | 1                       | 1                               | 1                              | 1                                      | **N (planner + executors)** |
-| Sandbox        | 5-line `SandboxContext` | same                            | same                           | same                                   | same                        |
+|                | Ep 1                    | Ep 2                            | Ep 3                           | Ep 4                                   | Ep 5                                            | Ep 6                                                       |
+| -------------- | ----------------------- | ------------------------------- | ------------------------------ | -------------------------------------- | ----------------------------------------------- | ---------------------------------------------------------- |
+| Loop           | naive `while`           | same                            | same                           | same                                   | same                                            | **`run_agent(task, agent_type)` — reentrant, recursive**   |
+| Tools          | `bash`                  | + `read`, `write`, `edit`, `grep` | + (no new tools)             | + `write_plan` + `think`               | + `list_skills` + `load_skill`                  | + `delegate`                                               |
+| Tool schemas   | hand-written            | `@tool` helper                  | same                           | same                                   | same                                            | same                                                       |
+| Stop condition | no tool calls → break   | same                            | **`done()` / `TaskComplete`**  | same                                   | same                                            | same; orchestrator's `done()` fires after verifier confirms |
+| History        | raw list                | raw list                        | **rolling-summary compaction** | same                                   | same                                            | per-worker                                                 |
+| Planning       | none                    | none                            | none                           | **`write_plan` + `think`**             | inherited                                       | inherited                                                  |
+| Skill library  | n/a                     | n/a                             | n/a                            | n/a                                    | **`.skills/<name>/SKILL.md` + dynamic injection** | inherited; workers can preload skills via their config     |
+| Agent configs  | n/a                     | n/a                             | n/a                            | n/a                                    | n/a                                             | **`.agents/<name>.md` config primitive (frontmatter + body)** |
+| Agents         | 1                       | 1                               | 1                              | 1                                      | 1                                               | **N (1 orchestrator + parallel workers)**                  |
+| Sandbox        | 5-line `SandboxContext` | same                            | same                           | same                                   | same                                            | same; workers share the parent's sandbox cwd               |
 
-By Ep 5, the code is a recognizable _minimal subset_ of the architectural pattern that powers production agent systems — loop, tools, compaction, done tool, planning + reasoning tools, orchestration — with all the production scaffolding deliberately removed.
+By Ep 6, the code is a recognizable _minimal subset_ of the architectural pattern that powers production agent systems — loop, tools, compaction, done tool, planning + reasoning tools, skills library, multi-agent orchestration with parallel dispatch — with all the production scaffolding deliberately removed.
 
 ---
 
@@ -174,17 +184,18 @@ Why this fits the series:
 - **Real module boundaries** (lexer / parser / renderer / extensions / CLI) — not arbitrary splits. Each episode's task lands on actual seams.
 - **Plant-a-bug surface is large.** Escaped backticks, malformed nested-list HTML, misaligned tables, footnote-numbering off-by-one — all natural and localizable.
 - **Has a running test suite** that the agent can invoke via `bash pytest`. The agent verifies its own work — more honest than "trust the agent."
-- **Naturally extensible** for Ep 5 — "add LaTeX output as a second renderer" is real multi-module work.
+- **Naturally extensible** through the existing extension hook protocol — Eps 2, 4, 5, and 6 all add new extensions (escaped-backtick fix, reference-style links, GitHub alerts, three GFM features in parallel). The protocol earns its keep across the series.
 
 ### Task escalation across episodes
 
 | Ep  | Task on `md2html`                                                                                                                 | Why it forces the episode's lesson                                                   |
 | --- | --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
 | 1   | Explore the repo and explain what it does                                                                                         | Multiple chained `bash` calls; loop is visibly iterating                             |
-| 2   | Fix a planted bug (e.g., lexer mishandles escaped backticks)                                                                      | Needs read + edit + run pytest — earns multi-tool design                             |
-| 3   | Refactor across modules (e.g., rename `Token` → `Node` across lexer/parser/renderer/tests; or change an extension hook signature) | Long history of file contents naturally fills context; agent visibly loses thread    |
-| 4   | Add reference-style markdown link support — feature-add that touches lexer + parser + renderer + extension registry              | Multi-step structure where a human would naturally plan; fair test of "does planning help?" (empirical answer: cost goes up, legibility is what you actually buy) |
-| 5   | Add LaTeX as a second output format                                                                                               | Touches CLI flag, new renderer, possibly extension hooks, tests — real decomposition |
+| 2   | Fix a planted bug — parser mishandles escaped backticks (one character missing from the escapable-character set)                  | Needs read + edit + run pytest — earns multi-tool design                             |
+| 3   | Refactor across modules — rename `Node` → `ASTNode` across 5 files / ~58 occurrences                                              | Long history of file contents naturally fills context; agent visibly loses thread; the compaction sweet spot vs. "hallucinated success" failure becomes legible |
+| 4   | Add reference-style markdown link support — feature-add touching lexer + parser + renderer + extension registry                   | Multi-step structure where a human would naturally plan; fair test of "does planning help?" (empirical answer: cost goes up, legibility is what you actually buy) |
+| 5   | Add GitHub-flavored alerts (`> [!NOTE]`, etc.) to md2html — implemented as a new extension                                        | Task explicitly directs the agent to check GitHub's docs — anchors the `research` skill (web_search + fetch_url) as a clean discover → load → use → done demo |
+| 6   | Add three independent GFM features at once (strikethrough, task lists, autolinks)                                                  | Three independent subtasks = natural parallel decomposition; the orchestrator's value is visible in the trajectory (three concurrent `delegate` calls in one turn) |
 
 ### Spec
 
@@ -192,16 +203,17 @@ Why this fits the series:
 - **Per-episode specs** (define what changes from the previous episode — agent additions and `initial/` state divergences):
   - **Episode 2:** [`spec/episode-02.md`](./spec/episode-02.md) — adds 4 tools + `@tool` decorator; plants escaped-backtick bug in parser.py; adds `escaped_backticks` fixture pair.
   - **Episode 3:** [`spec/episode-03.md`](./spec/episode-03.md) — adds done tool + rolling-summary compaction (~50 LOC); task is renaming `Node` → `ASTNode` across 5 files / 58 occurrences; `initial/` is clean (no planted modifications). Includes a non-negotiable 4-step verification procedure (pytest + case-sensitive grep counts + diff). **Implemented + 7 trajectories captured + producer brief written.** Parameter sweep revealed a "hallucinated success" failure mode at aggressive compaction settings (5K threshold + Keep 2) — the agent confidently calls `done()` while leaving the task half-finished. This is the bridge to Ep 4.
-  - **Episode 4:** [`spec/episode-04.md`](./spec/episode-04.md) — adds `write_plan` (TodoWrite-style structured plan in agent state, injected into the system prompt) + `think` (no-op echo for externalized reasoning). Reflection was tried and cut. Task: implement reference-style markdown links across the markdown pipeline. **Implemented + recorded baseline-vs-planning A/B + producer brief written.** Headline finding: planning + think made the agent +49% more expensive, +74% more iterations, with the same end result — recasting planning as a "legibility tax" rather than a speedup.
-  - Episode 5: to be written when prepared.
+  - **Episode 4:** [`spec/episode-04.md`](./spec/episode-04.md) — adds `write_plan` (TodoWrite-style structured plan in agent state, injected into the system prompt) + `think` (no-op echo for externalized reasoning). Reflection was tried and cut. Task: implement reference-style markdown links across the markdown pipeline. **Implemented + recorded baseline-vs-planning A/B + producer brief written.** Empirical observation (now framed as a design consideration per the build-spine principle, not a dramatic headline): planning + think made the agent +49% more expensive, +74% more iterations, with the same end result — useful input when deciding whether to add planning to your own agent; legibility is what you actually buy on long autonomous runs.
+  - **Episode 5:** [`spec/episode-05.md`](./spec/episode-05.md) — adds the skills system: `list_skills` + `load_skill` + the `.skills/<name>/SKILL.md` file format + a skill-provided tools registry; extends Ep 4's dynamic system-prompt mechanism to carry loaded-skill bodies. Task: add GitHub-flavored alerts to md2html. Two skills ship in `.skills/`: `research` (anchored by the task) and `verification`. **Implemented + 6 trajectories recorded + producer brief written + skills library overview written.** Brief aside in the producer brief on task wording as the variable that decides whether the agent reaches for skills (strong wording → reliable use; soft wording → bypassed).
+  - **Episode 6:** [`spec/episode-06.md`](./spec/episode-06.md) — adds the orchestration mechanism: `delegate(task, agent_type)` tool, `.agents/<name>.md` config primitive (frontmatter + body, parsed by the same YAML helper as Ep 5's `SKILL.md`), `run_agent(task, agent_type)` (Ep 5's loop, function-extracted; orchestrator and workers are the same function, parameterized by `AgentConfig`), and a `ThreadPoolExecutor` parallel dispatcher (multiple `delegate` tool_uses in one assistant turn run concurrently — matches the Claude Code / Agent SDK pattern). Task: add three GFM features at once (strikethrough, task lists, autolinks). Two worker configs ship in `.agents/`: `implementer` and `verifier`. **Implemented + 2 trajectories recorded (v1 antipattern + v2 canonical) + producer brief written.** Empirical findings (brief asides in the producer brief): the strong-wording lesson from Ep 5 generalizes to orchestrator prompts; `edit`'s exact-match semantics act as soft optimistic-concurrency when parallel workers collide on a shared file. **Season finale of the build arc.**
 
 ---
 
 ## Capstone (deferred)
 
-A 6th "documentary" episode — point the finished agent at a real engineering task and show what happens, failures included, unedited — is on the table but **not committed**. Decision point is **after Episode 4**: if the arc lands without it, skip it. If kept, it's a looser companion piece, not bound to the same Clyep production cadence as the main 5 episodes.
+A 7th "documentary" episode — point the finished Ep 6 agent at a real engineering task and show what happens, failures included, unedited — is on the table but **not committed**. Decision point is **after Episode 6 ships**: if the arc lands without it, skip it. If kept, it's a looser companion piece, not bound to the same Clyep production cadence as the main 6 episodes.
 
-The reasoning: a clean victory-lap demo would just duplicate what Ep 1–5 already proved. A documentary-style real run ("here's what happened, including what broke") is the only framing that adds value.
+The reasoning: a clean victory-lap demo would just duplicate what Ep 1–6 already proved. A documentary-style real run ("here's what happened, including what broke") is the only framing that adds value.
 
 ---
 
@@ -264,7 +276,7 @@ Reference materials and visual/conceptual inspiration for the series are tracked
 
 Per Clyep's production strengths (`tmp/about-clyep/clyep-video-production-strengths.txt`):
 
-- **Persistent visual artifact across the series:** the animated for-loop. It starts simple in Ep 1 (`while → invoke → tool → result → repeat`) and gains layers in each episode — done-tool ring, compaction layer, planner ring — until Ep 5 shows the multi-agent topology. That's the artifact the viewer subconsciously tracks across episodes.
+- **Persistent visual artifact across the series:** the animated for-loop. It starts simple in Ep 1 (`while → invoke → tool → result → repeat`) and gains layers in each episode — tools halo (Ep 2), done-ring + compaction band (Ep 3), planner ring + think bubble (Ep 4), skills rack (Ep 5) — until Ep 6 shows the multi-agent topology with parallel-worker silhouettes spawned from a `delegate` edge. That's the artifact the viewer subconsciously tracks across episodes.
 - **No AI avatars or talking heads.** Content is technical artifacts + AI-generated narration.
 - **Narrative discipline:** cold-open hook → mechanism → insight → payoff, every episode.
 - **Series-grade visual continuity.** Palette, typography, motion language designed once for the whole series at the start of Ep 1.

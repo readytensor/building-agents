@@ -269,10 +269,10 @@ Log: `tmp/runs/ep04/runF_full_caching_working.log`.
 
 ---
 
-## 9. What Ep 5 inherits
+## 9. What Eps 5–6 inherit
 
-- The Ep 4 sandbox state at task completion is the natural starting point for Ep 5's `initial/` (per the series convention).
-- The plan-injection mechanism (dynamic state in system, not messages) is the template for any inter-agent state Ep 5 wants to expose.
-- The dev-time SDK swap to native Anthropic + caching applies the same way to Ep 5's `agent.py` (and must be translated back before shipping).
-- The `done()`-reliability gap is now an open item that Ep 5 is well-positioned to address — multi-agent makes "who decides done" structurally sharper. See `feedback_done_reliability_overdue.md` in memory.
-- The task-choice lesson: feature-add gave us a harder task than bug-fix. For Ep 5, pick a task whose natural shape makes multi-agent's value plausible *a priori* — e.g., something with independently-parallelizable subtasks where an orchestrator-plus-worker split would obviously help.
+- The Ep 4 sandbox state at task completion is the natural starting point for Ep 5's `initial/` (per the series convention). Ep 5's post-run state then becomes Ep 6's `initial/`.
+- The plan-injection mechanism (dynamic state in system, not messages) is the template Ep 5 extends to carry loaded-skill bodies, and the template Ep 6 inherits for per-worker dynamic state.
+- The dev-time SDK swap to native Anthropic + caching applies the same way to Ep 5's and Ep 6's `agent.py` (and must be translated back before shipping).
+- The `done()`-reliability gap from Ep 4 stays unresolved through Ep 5 (partially self-resolved by clean-completion-signal tasks) and gets the structural answer in Ep 6 — the verifier worker owns the completion signal, and the orchestrator's `done()` fires after the verifier reports a clean pass. See `feedback_done_reliability_overdue.md` in memory.
+- The task-choice lesson — feature-add gave us a harder task than bug-fix — guided both Ep 5 (GH alerts feature-add, anchored research skill use) and Ep 6 (three GFM features at once, naturally parallelisable so orchestration's value is *a priori* plausible).

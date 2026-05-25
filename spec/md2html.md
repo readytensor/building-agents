@@ -1,13 +1,13 @@
 # `md2html` — Toy Codebase Spec
 
-The toy codebase used across all 5 episodes of "Agents from First Principles." A small but properly-structured Markdown-to-HTML CLI tool. The agent uses this as its working surface; episode tasks involve exploring, fixing, refactoring, debugging, and extending it.
+The toy codebase used across all 6 episodes of "Agents from First Principles." A small but properly-structured Markdown-to-HTML CLI tool. The agent uses this as its working surface; episode tasks involve exploring, fixing, refactoring, debugging, and extending it.
 
 **Design goals:**
 
 - Real module boundaries (lexer / parser / renderer / extensions) so every episode's task lands on actual seams — not arbitrary splits.
 - Compact enough to read in one sitting (~1,200 LOC including tests).
 - Real pytest suite so the agent can verify its own work via `bash pytest`.
-- Naturally extensible (Ep 5 adds LaTeX output as a second renderer).
+- Naturally extensible through the existing extension hook protocol — Eps 4, 5, and 6 each add new markdown extensions (reference-style links, GitHub-flavored alerts, three GFM features in parallel) through the same protocol.
 
 ---
 
@@ -194,16 +194,17 @@ A viewer evaluating the agent's output should be able to verify each of those cl
 
 ---
 
-## 8. Per-episode initial state (forward-looking)
+## 8. Per-episode initial state
 
-Later episodes' `initial/` directories diverge from Ep 1's, but only in the minimum the lesson requires. **Each will be spec'd separately when that episode is being prepared.** Sketch:
+Per-episode `initial/` directories diverge from Ep 1's, but only in the minimum the lesson requires. **Each is spec'd in its own `spec/episode-NN.md`.** Summary as of the locked series:
 
-| Ep | What changes from Ep 1's `initial/` | Agent's task |
+| Ep | What changes from the prior episode's `initial/` | Agent's task |
 |---|---|---|
-| 2 | One planted bug in lexer, parser, or one extension; corresponding test fails | Find and fix the bug; tests pass |
-| 3 | Same as Ep 1, possibly with one awkward naming or hook signature that's a refactor target | Multi-file refactor (e.g., `Token` → `Node`, or change a hook signature) |
-| 4 | A failing test whose root cause is genuinely ambiguous across modules (e.g., "tables in nested lists render wrong") | Debug; ambiguity earns planning + reflection |
-| 5 | Same as Ep 1 + a spec for a LaTeX renderer to be added | Add LaTeX as a second output format alongside HTML |
+| 2 | Planted bug in `parser.py` (escapable-character set missing the backtick) + new `escaped_backticks.{md,html}` fixture pair (test fails) | Find and fix the bug; all 43 tests pass |
+| 3 | Same as Ep 2 *after* the fix (no planted modifications; clean) | Multi-file refactor — rename `Node` → `ASTNode` across 5 files / ~58 occurrences; pytest 43/43 + case-sensitive grep checks |
+| 4 | Same as Ep 3 + new failing `reference_style_links.{md,html}` fixture pair | Implement reference-style markdown link support as a new extension; 44/44 tests pass |
+| 5 | Ep 4 post-run state + new failing `github_alerts.{md,html}` fixture pair + new `.skills/` directory shipping `research` and `verification` skills | Implement GitHub-flavored alerts as a new extension; `research` skill loads to look up GitHub's docs; 45/45 tests pass |
+| 6 | Ep 5 post-run state + 3 new failing fixture pairs (`strikethrough`, `task_lists`, `autolinks`) + new `.agents/` directory shipping `implementer` and `verifier` worker configs | Orchestrator decomposes into 3 parallel implementer workers + 1 verifier worker; 48/48 tests pass |
 
 ---
 
