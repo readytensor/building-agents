@@ -40,11 +40,11 @@ cd episodes/01-loop
 python ../../capture.py                  # defaults to: python -u agent.py
 ```
 
-It mirrors the agent's output to your terminal live **and** writes a timestamped log to `<cwd>/logs/` (gitignored): a human-readable `run-<timestamp>.log` (each line prefixed with elapsed time, e.g. `[+ 12.34s]`) and a `run-<timestamp>.jsonl` of `{"t", "text"}` records for later inspection/post-processing. Works the same on every episode and every platform.
+It mirrors the agent's output to your terminal live **and** writes each run to its own folder `<cwd>/logs/<timestamp>/` (gitignored), so runs never overwrite each other. Each folder holds `terminal.log` (human-readable, each line prefixed with elapsed time, e.g. `[+ 12.34s]`), `terminal.jsonl` (`{"t", "text"}` records for later inspection), and the run's `tool_calls.jsonl` (collected from the agent — see below). Works the same on every episode and every platform.
 
 `capture.py` runs any command, not just `agent.py` — e.g. `python capture.py -- pytest -q` or `python capture.py --cwd episodes/03-context`.
 
-Separately, from Episode 2 onward the agent records its own **tool-call telemetry**: at the end of a run it prints a summary (how many tools it called, in what order) and writes the full sequence to `tool_calls.jsonl`. The number and order of calls varies run to run — that variance is itself a topic the series returns to.
+Separately, from Episode 2 onward the agent records its own **tool-call telemetry**: at the end of a run it prints a summary (how many tools it called, in what order) and writes the full sequence to `tool_calls.jsonl`. When run through `capture.py`, that file is moved into the run folder, so each run's path is preserved. The number and order of calls varies run to run — that variance is itself a topic the series returns to.
 
 After a run, inspect what the agent did:
 
