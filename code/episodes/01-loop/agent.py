@@ -83,6 +83,27 @@ SYSTEM = (
 )
 TASK = "Explore the codebase in the current directory and tell me what it does."
 
+# --- Tool-call telemetry: record every tool the agent invokes, in order, so
+# we can see the path it took and how many calls it made (this varies run to
+# run). Summarized and written to tool_calls.jsonl at the end of the run.
+TOOL_CALLS = []  # list of {"tool": name, "args": {...}} in call order
+
+def write_tool_telemetry():
+    """Print a summary of the tool calls made this run, and write the full
+    ordered sequence to tool_calls.jsonl. The number of calls and their order
+    vary from run to run."""
+    counts = {}
+    for call in TOOL_CALLS:
+        counts[call["tool"]] = counts.get(call["tool"], 0) + 1
+    breakdown = ", ".join(f"{name}×{n}" for name, n in counts.items())
+    path = " → ".join(call["tool"] for call in TOOL_CALLS)
+    print("\n=== TOOL CALLS ===")
+    print(f"{len(TOOL_CALLS)} calls — {breakdown}")
+    print(f"path: {path}")
+    with open("tool_calls.jsonl", "w", encoding="utf-8") as f:
+        for call in TOOL_CALLS:
+            f.write(json.dumps(call) + "\n")
+
 messages = [
     {"role": "system", "content": SYSTEM},
     {"role": "user", "content": TASK},
@@ -98,10 +119,12 @@ while True:
 
     if not msg.tool_calls:
         print(f"\n=== FINAL RESPONSE ===\n\n{msg.content or ''}")
+        write_tool_telemetry()
         break
 
     for tc in msg.tool_calls:
         args = json.loads(tc.function.arguments)
+        TOOL_CALLS.append({"tool": tc.function.name, "args": args})
         print(f"> bash({args['command']!r})")
         result = bash(**args)
         if len(result) < 400:

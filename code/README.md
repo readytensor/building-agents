@@ -37,10 +37,14 @@ To save everything the agent prints — handy for reviewing or debugging a run a
 
 ```bash
 cd episodes/01-loop
-python ../../capture.py            # or, from the code/ root: python capture.py episodes/01-loop
+python ../../capture.py                  # defaults to: python -u agent.py
 ```
 
-It mirrors the agent's output to your terminal live **and** writes a timestamped log to `episodes/<ep>/logs/` (gitignored): a human-readable `run-<timestamp>.log` (each line prefixed with elapsed time, e.g. `[+ 12.34s]`) and a `run-<timestamp>.jsonl` of `{"t", "text"}` records for replay/summarization tooling. Works the same on every episode and every platform.
+It mirrors the agent's output to your terminal live **and** writes a timestamped log to `<cwd>/logs/` (gitignored): a human-readable `run-<timestamp>.log` (each line prefixed with elapsed time, e.g. `[+ 12.34s]`) and a `run-<timestamp>.jsonl` of `{"t", "text"}` records for later inspection/post-processing. Works the same on every episode and every platform.
+
+`capture.py` runs any command, not just `agent.py` — e.g. `python capture.py -- pytest -q` or `python capture.py --cwd episodes/03-context`.
+
+Separately, from Episode 2 onward the agent records its own **tool-call telemetry**: at the end of a run it prints a summary (how many tools it called, in what order) and writes the full sequence to `tool_calls.jsonl`. The number and order of calls varies run to run — that variance is itself a topic the series returns to.
 
 After a run, inspect what the agent did:
 

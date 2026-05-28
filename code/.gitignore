@@ -19,6 +19,10 @@ episodes/*/sandbox/
 
 # Captured run logs (written by capture.py; production/debug artifacts)
 episodes/*/logs/
+logs/
+
+# Tool-call telemetry written by the agent on each run
+episodes/*/tool_calls.jsonl
 
 # Internal team notes — never shared with students
 _internal/

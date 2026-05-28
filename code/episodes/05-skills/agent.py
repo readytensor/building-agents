@@ -46,6 +46,7 @@ shipping to the openai-SDK published code:
     tool, when shipping)
 See ../../../CLAUDE.md.
 """
+import functools
 import inspect
 import json
 import os
@@ -82,6 +83,11 @@ KEEP_LAST_ITERATIONS = int(os.environ.get("EP3_KEEP", 4))
 MAX_ITERATIONS = int(os.environ.get("EP5_MAX_ITER", 200))
 WEB_SEARCH_MAX_USES = int(os.environ.get("EP5_WEB_SEARCH_MAX", 10))
 
+# --- Tool-call telemetry: record every tool the agent invokes, in order, so
+# we can see the path it took and how many calls it made (this varies run to
+# run). Summarized and written to tool_calls.jsonl at the end of the run.
+TOOL_CALLS = []  # list of {"tool": name, "args": {...}} in call order
+
 
 # --- 3. The @tool decorator (Anthropic shape).
 def tool(description: str):
@@ -96,7 +102,17 @@ def tool(description: str):
             properties[name] = {"type": json_types.get(t, "string")}
             if param.default is inspect.Parameter.empty:
                 required.append(name)
-        func.tool_definition = {
+
+        # Wrap the tool so every invocation is recorded in call order. This
+        # captures all locally-executed tools uniformly — including the
+        # tools that skills register, since they're decorated the same way.
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            bound = sig.bind(*args, **kwargs)
+            TOOL_CALLS.append({"tool": func.__name__, "args": dict(bound.arguments)})
+            return func(*args, **kwargs)
+
+        wrapper.tool_definition = {
             "name": func.__name__,
             "description": description,
             "input_schema": {
@@ -105,7 +121,7 @@ def tool(description: str):
                 "required": required,
             },
         }
-        return func
+        return wrapper
     return decorator
 
 
@@ -628,6 +644,23 @@ def _preview_args(d) -> str:
     return ", ".join(parts)
 
 
+def write_tool_telemetry():
+    """Print a summary of the tool calls made this run, and write the full
+    ordered sequence to tool_calls.jsonl. The number of calls and their order
+    vary from run to run."""
+    counts = {}
+    for call in TOOL_CALLS:
+        counts[call["tool"]] = counts.get(call["tool"], 0) + 1
+    breakdown = ", ".join(f"{name}×{n}" for name, n in counts.items())
+    path = " → ".join(call["tool"] for call in TOOL_CALLS)
+    print("\n=== TOOL CALLS ===")
+    print(f"{len(TOOL_CALLS)} calls — {breakdown}")
+    print(f"path: {path}")
+    with open("tool_calls.jsonl", "w", encoding="utf-8") as f:
+        for call in TOOL_CALLS:
+            f.write(json.dumps(call) + "\n")
+
+
 # --- 13. The agent loop.
 SYSTEM = (
     "You are a coding assistant operating inside a sandboxed working "
@@ -806,3 +839,5 @@ else:
     print(f"server-tool calls:  none")
 print(f"\nconfig: COMPACTION_THRESHOLD={COMPACTION_THRESHOLD:,}  KEEP_LAST_ITERATIONS={KEEP_LAST_ITERATIONS}  "
       f"MAX_ITERATIONS={MAX_ITERATIONS}  WEB_SEARCH_MAX_USES={WEB_SEARCH_MAX_USES}")
+
+write_tool_telemetry()

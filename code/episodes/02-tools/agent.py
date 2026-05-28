@@ -8,6 +8,7 @@ done tool arrives in Ep 3.
 
 See ../../README.md for context.
 """
+import functools
 import inspect
 import json
 import os
@@ -40,6 +41,11 @@ else:
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-5-mini")
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL or None)
 
+# --- Tool-call telemetry: record every tool the agent invokes, in order, so
+# we can see the path it took and how many calls it made (this varies run to
+# run). Summarized and written to tool_calls.jsonl at the end of the run.
+TOOL_CALLS = []  # list of {"tool": name, "args": {...}} in call order
+
 
 # --- 3. The @tool decorator: function signature -> JSON-schema tool definition.
 def tool(description: str):
@@ -55,7 +61,14 @@ def tool(description: str):
             properties[name] = {"type": json_types.get(t, "string")}
             if param.default is inspect.Parameter.empty:
                 required.append(name)
-        func.tool_definition = {
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            call_args = sig.bind(*args, **kwargs)
+            TOOL_CALLS.append({"tool": func.__name__, "args": dict(call_args.arguments)})
+            return func(*args, **kwargs)
+
+        wrapper.tool_definition = {
             "type": "function",
             "function": {
                 "name": func.__name__,
@@ -68,7 +81,7 @@ def tool(description: str):
                 },
             },
         }
-        return func
+        return wrapper
     return decorator
 
 
@@ -78,6 +91,23 @@ def _safe_path(path: str) -> Path:
     resolved = (SANDBOX / path).resolve()
     resolved.relative_to(SANDBOX.resolve())  # raises ValueError if outside
     return resolved
+
+
+def write_tool_telemetry():
+    """Print a summary of the tool calls made this run, and write the full
+    ordered sequence to tool_calls.jsonl. The number of calls and their order
+    vary from run to run."""
+    counts = {}
+    for call in TOOL_CALLS:
+        counts[call["tool"]] = counts.get(call["tool"], 0) + 1
+    breakdown = ", ".join(f"{name}×{n}" for name, n in counts.items())
+    path = " → ".join(call["tool"] for call in TOOL_CALLS)
+    print("\n=== TOOL CALLS ===")
+    print(f"{len(TOOL_CALLS)} calls — {breakdown}")
+    print(f"path: {path}")
+    with open("tool_calls.jsonl", "w", encoding="utf-8") as f:
+        for call in TOOL_CALLS:
+            f.write(json.dumps(call) + "\n")
 
 
 @tool("Execute a shell command in the working directory and return its output.")
@@ -202,6 +232,7 @@ while True:
     if not msg.tool_calls:
         print(f"\n=== FINAL RESPONSE ===\n\n{msg.content or ''}")
         print(f"\n=== TOKEN USAGE ===\niterations: {iteration}  input: {total_in:,}  output: {total_out:,}  total: {total_in + total_out:,}")
+        write_tool_telemetry()
         break
 
     for tc in msg.tool_calls:

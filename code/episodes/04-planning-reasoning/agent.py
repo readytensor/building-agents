@@ -28,6 +28,7 @@ before shipping. See ../../../CLAUDE.md for the locked decision.
 
 See ../../README.md for context.
 """
+import functools
 import inspect
 import json
 import os
@@ -61,6 +62,11 @@ COMPACTION_THRESHOLD = int(os.environ.get("EP3_THRESHOLD", 30_000))
 KEEP_LAST_ITERATIONS = int(os.environ.get("EP3_KEEP", 4))
 MAX_ITERATIONS = int(os.environ.get("EP4_MAX_ITER", 150))
 
+# --- Tool-call telemetry: record every tool the agent invokes, in order, so
+# we can see the path it took and how many calls it made (this varies run to
+# run). Summarized and written to tool_calls.jsonl at the end of the run.
+TOOL_CALLS = []  # list of {"tool": name, "args": {...}} in call order
+
 
 # --- 3. The @tool decorator (Anthropic shape).
 def tool(description: str):
@@ -75,7 +81,15 @@ def tool(description: str):
             properties[name] = {"type": json_types.get(t, "string")}
             if param.default is inspect.Parameter.empty:
                 required.append(name)
-        func.tool_definition = {
+
+        @functools.wraps(func)
+        def wrapper(**kwargs):
+            # Record the call before invoking, so tools that raise (e.g. done)
+            # are still captured and the recorded path stays complete.
+            TOOL_CALLS.append({"tool": func.__name__, "args": kwargs})
+            return func(**kwargs)
+
+        wrapper.tool_definition = {
             "name": func.__name__,
             "description": description,
             "input_schema": {
@@ -84,7 +98,7 @@ def tool(description: str):
                 "required": required,
             },
         }
-        return func
+        return wrapper
     return decorator
 
 
@@ -401,6 +415,23 @@ def _block_to_dict(b):
     return b.model_dump()
 
 
+def write_tool_telemetry():
+    """Print a summary of the tool calls made this run, and write the full
+    ordered sequence to tool_calls.jsonl. The number of calls and their order
+    vary from run to run."""
+    counts = {}
+    for call in TOOL_CALLS:
+        counts[call["tool"]] = counts.get(call["tool"], 0) + 1
+    breakdown = ", ".join(f"{name}×{n}" for name, n in counts.items())
+    path = " → ".join(call["tool"] for call in TOOL_CALLS)
+    print("\n=== TOOL CALLS ===")
+    print(f"{len(TOOL_CALLS)} calls — {breakdown}")
+    print(f"path: {path}")
+    with open("tool_calls.jsonl", "w", encoding="utf-8") as f:
+        for call in TOOL_CALLS:
+            f.write(json.dumps(call) + "\n")
+
+
 # --- 12. The agent loop.
 SYSTEM = (
     "You are a coding assistant operating inside a sandboxed working "
@@ -533,4 +564,7 @@ print(f"\n=== REASONING STRATEGY USAGE ===")
 print(f"write_plan calls:   {plan_writes}")
 print(f"think calls:        {think_calls}")
 print(f"final plan state:\n{_format_plan(CURRENT_PLAN)}")
+
+write_tool_telemetry()
+
 print(f"\nconfig: COMPACTION_THRESHOLD={COMPACTION_THRESHOLD:,}  KEEP_LAST_ITERATIONS={KEEP_LAST_ITERATIONS}")

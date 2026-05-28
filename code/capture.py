@@ -1,29 +1,31 @@
 """
-capture.py — run an episode's agent.py and save everything it prints to a log.
+capture.py — run a command and save everything it prints to a timestamped log.
 
-Mirrors the agent's output to your terminal live while also writing a
-timestamped copy to <episode>/logs/, so you can review a run afterwards. Each
-line is stamped with the time elapsed since the run started.
+Mirrors the command's output to your terminal live while also writing a copy to
+a log directory, so a run can be reviewed or debugged later. Each line is
+stamped with the time elapsed since the run started.
 
-Cross-platform: pure Python, no shell pipes. Runs the same interpreter that
-launched it (sys.executable), so it uses your active virtual environment.
+Cross-platform and project-agnostic: it runs whatever command you give it. With
+no command it defaults to `python -u agent.py` in the current directory, which
+is the common case for this repo. It uses the same interpreter that launched it
+(sys.executable), so it stays inside your active virtual environment.
 
-Usage (from an episode directory):
-    python ../../capture.py
+Examples:
+    python ../../capture.py                     # run agent.py in the current dir
+    python capture.py --cwd episodes/01-loop     # run agent.py in that dir
+    python capture.py -- pytest -q               # run any command
+    python capture.py --logdir notes -- python walkthrough.py
 
-Usage (from the code/ root, naming the episode):
-    python capture.py episodes/01-loop
-
-Output (written into <episode>/logs/, which is gitignored):
+Output (written into the log directory, default <cwd>/logs):
     run-YYYYMMDD-HHMMSS.log    human-readable, each line prefixed [+12.34s]
     run-YYYYMMDD-HHMMSS.jsonl  one JSON object per line: {"t": 12.34, "text": "..."}
                                plus a leading "meta" record and trailing "end"
                                record (exit code + total duration).
 
-agent.py is run unbuffered so the live mirror and the log stay in real time and
-in order. agent.py's relative paths (initial/, sandbox/, ../../.env) resolve as
-if you'd run it directly, because we set cwd to the episode.
+The command is run unbuffered (PYTHONUNBUFFERED) so the live mirror and the log
+stay in real time and in order.
 """
+import argparse
 import json
 import os
 import subprocess
@@ -33,36 +35,53 @@ from datetime import datetime
 from pathlib import Path
 
 
-def find_episode_dir() -> Path:
-    """Decide which episode to run: the path given as an argument, or the
-    current directory if none was given."""
-    if len(sys.argv) > 1:
-        return Path(sys.argv[1]).resolve()
-    return Path.cwd()
+def parse_args():
+    """Read the command line: an optional working directory, an optional log
+    directory, and the command to run (everything after `--`)."""
+    parser = argparse.ArgumentParser(description="Run a command and log its output.")
+    parser.add_argument("--cwd", default=".", help="working directory to run in (default: current)")
+    parser.add_argument("--logdir", default=None, help="where to write logs (default: <cwd>/logs)")
+    parser.add_argument(
+        "command", nargs=argparse.REMAINDER,
+        help="command to run; defaults to `python -u agent.py`",
+    )
+    return parser.parse_args()
 
 
-def make_log_paths(logs_dir: Path) -> tuple[Path, Path]:
+def resolve_command(raw_command):
+    """Turn the leftover command-line args into a command list. argparse leaves
+    a leading `--` in place, so drop it. If nothing was given, default to
+    running agent.py with the current interpreter."""
+    command = list(raw_command)
+    if command and command[0] == "--":
+        command = command[1:]
+    if not command:
+        command = [sys.executable, "-u", "agent.py"]
+    return command
+
+
+def make_log_paths(logs_dir: Path):
     """Build a fresh, collision-free pair of log filenames stamped with the
     current time, so re-running never overwrites a previous capture."""
-    logs_dir.mkdir(exist_ok=True)
+    logs_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
     plain_log = logs_dir / f"run-{stamp}.log"
     json_log = logs_dir / f"run-{stamp}.jsonl"
     return plain_log, json_log
 
 
-def start_agent(episode_dir: Path) -> subprocess.Popen:
-    """Launch <episode_dir>/agent.py as a child process whose output we can
-    read line by line as it is produced."""
-    # Force the child to emit output unbuffered and in UTF-8, so the live
-    # mirror and the saved log stay in step (and arrows/checkmarks survive).
+def start_command(command, cwd: Path) -> subprocess.Popen:
+    """Launch the command as a child process whose output we can read line by
+    line as it is produced."""
+    # Force the child to emit output unbuffered and in UTF-8, so the live mirror
+    # and the saved log stay in step (and arrows/checkmarks survive).
     child_env = dict(os.environ)
     child_env["PYTHONUNBUFFERED"] = "1"
     child_env["PYTHONIOENCODING"] = "utf-8"
 
     return subprocess.Popen(
-        [sys.executable, "-u", "agent.py"],
-        cwd=episode_dir,            # so agent.py's relative paths still work
+        command,
+        cwd=cwd,
         env=child_env,
         stdout=subprocess.PIPE,     # we capture stdout...
         stderr=subprocess.STDOUT,   # ...and fold stderr into it, so errors are logged too
@@ -74,17 +93,15 @@ def start_agent(episode_dir: Path) -> subprocess.Popen:
 
 
 def main() -> int:
-    episode_dir = find_episode_dir()
-    agent_file = episode_dir / "agent.py"
-    if not agent_file.is_file():
-        sys.stderr.write(f"capture.py: no agent.py found in {episode_dir}\n")
-        return 2
+    args = parse_args()
+    cwd = Path(args.cwd).resolve()
+    command = resolve_command(args.command)
+    logs_dir = Path(args.logdir).resolve() if args.logdir else cwd / "logs"
 
-    plain_log, json_log = make_log_paths(episode_dir / "logs")
-    episode_name = episode_dir.name
-    print(f"[capture] running {episode_name}/agent.py  ->  logs/{plain_log.name}\n", flush=True)
+    plain_log, json_log = make_log_paths(logs_dir)
+    printable_command = " ".join(command)
+    print(f"[capture] running: {printable_command}  ->  {plain_log}\n", flush=True)
 
-    # Open both log files for the whole run.
     plain_file = open(plain_log, "w", encoding="utf-8")
     json_file = open(json_log, "w", encoding="utf-8")
 
@@ -97,19 +114,18 @@ def main() -> int:
     # First JSONL line is metadata about the run.
     write_json_record({
         "type": "meta",
-        "episode": episode_name,
+        "command": command,
+        "cwd": str(cwd),
         "started": datetime.now().isoformat(timespec="seconds"),
-        "agent": str(agent_file),
-        "argv": sys.argv,
     })
 
     start_time = time.monotonic()
     exit_code = 0
-    agent = start_agent(episode_dir)
+    process = start_command(command, cwd)
 
     try:
-        # Read the agent's output one line at a time, as it appears.
-        for raw_line in agent.stdout:
+        # Read the command's output one line at a time, as it appears.
+        for raw_line in process.stdout:
             line = raw_line.rstrip("\n")
             elapsed = round(time.monotonic() - start_time, 2)
 
@@ -120,13 +136,13 @@ def main() -> int:
             plain_file.write(f"[+{elapsed:>7.2f}s] {line}\n")
             plain_file.flush()
 
-            # 3) Structured log: for replay timing and LLM summarization.
+            # 3) Structured log: for later inspection and post-processing.
             write_json_record({"t": elapsed, "text": line})
 
-        exit_code = agent.wait()
+        exit_code = process.wait()
     except KeyboardInterrupt:
-        agent.terminate()
-        exit_code = agent.wait()
+        process.terminate()
+        exit_code = process.wait()
         print("\n[capture] interrupted", flush=True)
 
     # Final JSONL line records how the run ended.
@@ -136,7 +152,7 @@ def main() -> int:
     plain_file.close()
     json_file.close()
 
-    print(f"\n[capture] done in {duration}s (exit {exit_code}) -> logs/{plain_log.name}", flush=True)
+    print(f"\n[capture] done in {duration}s (exit {exit_code}) -> {plain_log}", flush=True)
     return exit_code
 
 

@@ -643,6 +643,32 @@ class WorkerMetrics:
 GLOBAL_METRICS: dict[str, WorkerMetrics] = {}
 _METRICS_LOCK = threading.Lock()
 
+# --- Tool-call telemetry: record every tool each agent invokes, in order,
+# tagged with which agent made it (orchestrator vs each worker), so we can see
+# the path the whole system took and how many calls each agent made. This
+# varies run to run. Summarized and written to tool_calls.jsonl at the end.
+TOOL_CALLS = []  # list of {"agent": label, "tool": name, "args": {...}}
+
+
+def write_tool_telemetry():
+    """Print a per-agent summary of the tool calls made this run, and write
+    the full ordered sequence to tool_calls.jsonl. How many tools each agent
+    calls, and in what order, varies from run to run."""
+    per_agent = {}
+    for call in TOOL_CALLS:
+        per_agent.setdefault(call["agent"], []).append(call["tool"])
+    print("\n=== TOOL CALLS ===")
+    print(f"{len(TOOL_CALLS)} calls across {len(per_agent)} agents")
+    for agent_label, tools in per_agent.items():
+        counts = {}
+        for tool in tools:
+            counts[tool] = counts.get(tool, 0) + 1
+        breakdown = ", ".join(f"{name}×{n}" for name, n in counts.items())
+        print(f"  {agent_label}: {len(tools)} calls — {breakdown}")
+    with open("tool_calls.jsonl", "w", encoding="utf-8") as f:
+        for call in TOOL_CALLS:
+            f.write(json.dumps(call) + "\n")
+
 
 # --- 14. The agent loop, refactored as a recursive function.
 ORCHESTRATOR_SYSTEM = """You are an **orchestrator**.
@@ -861,6 +887,7 @@ def run_agent(task: str, agent_type: str) -> str:
                 try:
                     fn = tools_by_name[tu.name]
                     args = tu.input or {}
+                    TOOL_CALLS.append({"agent": label, "tool": tu.name, "args": args})
                     arg_preview = _preview_args(args)
                     p(f"> {tu.name}({arg_preview})")
                     result = fn(**args)
@@ -890,6 +917,7 @@ def run_agent(task: str, agent_type: str) -> str:
                     # Single delegate — call inline (no thread pool overhead).
                     tu = delegate_uses[0]
                     args = tu.input or {}
+                    TOOL_CALLS.append({"agent": label, "tool": "delegate", "args": args})
                     p(f"> delegate(agent_type={args.get('agent_type')!r}, "
                       f"task=<{len(str(args.get('task','')))}chars>)")
                     result = delegate(**args)
@@ -907,6 +935,7 @@ def run_agent(task: str, agent_type: str) -> str:
                         futures = {}
                         for tu in delegate_uses:
                             args = tu.input or {}
+                            TOOL_CALLS.append({"agent": label, "tool": "delegate", "args": args})
                             p(f">    [submit] delegate(agent_type={args.get('agent_type')!r}, "
                               f"task=<{len(str(args.get('task','')))}chars>)")
                             fut = pool.submit(delegate, **args)
@@ -1030,3 +1059,5 @@ grand = total_in + total_out + total_ci + total_co
 print(f"grand total tokens: {grand:,}")
 print(f"\nconfig: COMPACTION_THRESHOLD={COMPACTION_THRESHOLD:,}  KEEP_LAST_ITERATIONS={KEEP_LAST_ITERATIONS}  "
       f"MAX_ITERATIONS={MAX_ITERATIONS}  MAX_WORKER_ITER={MAX_WORKER_ITER}")
+
+write_tool_telemetry()
