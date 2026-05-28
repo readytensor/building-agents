@@ -33,7 +33,7 @@ Each episode is self-contained. The agent operates on `episodes/<ep>/sandbox/`, 
 
 ### Recording a run
 
-`run.py` runs an episode as a fresh **run**: it creates a new folder `<cwd>/logs/<timestamp>/` (gitignored, never overwritten), runs the agent, and moves the agent's `tool_calls.jsonl` into that folder. Add `--capture` to also record the terminal output there.
+`run.py` runs an episode as a fresh **run**: it creates a new folder `<cwd>/logs/<timestamp>/` (gitignored, never overwritten), runs the agent, moves the agent's `tool_calls.jsonl` into that folder, and prints a summary of the tool calls. Add `--capture` to also record the terminal output there.
 
 ```bash
 cd episodes/01-loop
@@ -69,7 +69,7 @@ Because each run gets its own folder, you can run the same task repeatedly and c
 
 `capture.py` is the underlying terminal recorder — one job: run a command and tee its output to a log dir. `run.py` uses it for `--capture`, and it works standalone on any command too, e.g. `python capture.py -- pytest -q`.
 
-From Episode 2 onward the agent records its own **tool-call telemetry**: at the end of a run it prints a summary (how many tools it called, in what order) and writes the full sequence to `tool_calls.jsonl`.
+From Episode 2 onward the agent records its own **tool-call telemetry**: it writes the full ordered sequence of tool calls to `tool_calls.jsonl`. The agent doesn't print a summary itself — it just does its task; `run.py` renders the summary (above) from that file.
 
 After a run, inspect what the agent did:
 

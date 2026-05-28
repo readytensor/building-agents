@@ -18,10 +18,16 @@ run.py is just the outer harness; it can run any episode.
     python ../../run.py --capture             # also record terminal output
 """
 import argparse
+import json
 import shutil
 import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
+
+# Our own output includes → and × in the tool-call summary; make sure stdout can
+# render them on every platform (Windows consoles default to cp1252).
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 import capture  # sibling module; sys.path[0] is run.py's folder, so this resolves
 
@@ -38,6 +44,49 @@ def make_run_dir(logs_dir: Path) -> Path:
         suffix += 1
     run_dir.mkdir()
     return run_dir
+
+
+def plural(n, word):
+    """'1 call' / '3 calls' — pluralize a word by count."""
+    return f"{n} {word}" if n == 1 else f"{n} {word}s"
+
+
+def breakdown(tools):
+    """'bash, bash, read' -> 'bash×2, read×1' (preserving first-seen order)."""
+    counts = {}
+    for tool in tools:
+        counts[tool] = counts.get(tool, 0) + 1
+    return ", ".join(f"{name}×{n}" for name, n in counts.items())
+
+
+def print_tool_call_summary(tool_calls_path: Path) -> None:
+    """Render a summary of the tool calls the agent recorded this run. This is
+    the harness's view of the agent's telemetry — the agent writes the file but
+    does not print a summary itself. Silently does nothing if there's no file."""
+    if not tool_calls_path.exists():
+        return
+    calls = []
+    with open(tool_calls_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                calls.append(json.loads(line))
+    if not calls:
+        return
+
+    print("\n=== TOOL CALLS ===")
+    if any("agent" in call for call in calls):
+        # Multi-agent run (e.g. Episode 6): group by which agent made the call.
+        per_agent = {}
+        for call in calls:
+            per_agent.setdefault(call.get("agent", "?"), []).append(call["tool"])
+        print(f"{plural(len(calls), 'call')} across {plural(len(per_agent), 'agent')}")
+        for agent_label, tools in per_agent.items():
+            print(f"  {agent_label}: {plural(len(tools), 'call')} — {breakdown(tools)}")
+    else:
+        tools = [call["tool"] for call in calls]
+        print(f"{plural(len(calls), 'call')} — {breakdown(tools)}")
+        print("path: " + " → ".join(tools))
 
 
 def main() -> int:
@@ -77,6 +126,9 @@ def main() -> int:
         if produced.exists():
             shutil.move(str(produced), str(run_dir / name))
             print(f"[run] collected {name}", flush=True)
+
+    # The harness — not the agent — renders the tool-call summary.
+    print_tool_call_summary(run_dir / "tool_calls.jsonl")
 
     print(f"\n[run] done (exit {exit_code}) -> {run_dir}", flush=True)
     return exit_code

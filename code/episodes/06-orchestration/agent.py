@@ -651,20 +651,9 @@ TOOL_CALLS = []  # list of {"agent": label, "tool": name, "args": {...}}
 
 
 def write_tool_telemetry():
-    """Print a per-agent summary of the tool calls made this run, and write
-    the full ordered sequence to tool_calls.jsonl. How many tools each agent
-    calls, and in what order, varies from run to run."""
-    per_agent = {}
-    for call in TOOL_CALLS:
-        per_agent.setdefault(call["agent"], []).append(call["tool"])
-    print("\n=== TOOL CALLS ===")
-    print(f"{len(TOOL_CALLS)} calls across {len(per_agent)} agents")
-    for agent_label, tools in per_agent.items():
-        counts = {}
-        for tool in tools:
-            counts[tool] = counts.get(tool, 0) + 1
-        breakdown = ", ".join(f"{name}×{n}" for name, n in counts.items())
-        print(f"  {agent_label}: {len(tools)} calls — {breakdown}")
+    """Write the tool calls made this run to tool_calls.jsonl, one JSON object
+    per line in call order (each tagged with the agent that made it). Recording
+    only — rendering a summary is left to whatever reads the file."""
     with open("tool_calls.jsonl", "w", encoding="utf-8") as f:
         for call in TOOL_CALLS:
             f.write(json.dumps(call) + "\n")

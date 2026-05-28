@@ -118,6 +118,10 @@ def main() -> int:
     )
     args = parser.parse_args()
 
+    # The output we mirror may contain unicode (→ ✓ etc.); make sure our own
+    # stdout can render it on every platform (Windows consoles default to cp1252).
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
     command = resolve_command(args.command)
     cwd = Path(args.cwd).resolve()
     out_dir = Path(args.out).resolve()
