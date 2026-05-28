@@ -64,7 +64,6 @@ These have been settled across planning conversations. Build on them; don't re-d
 
 - **Capstone (real-project) episode.** Deferred per the original plan; decide now that Ep 6 is locked. If shipped, it'd be a documentary companion piece applying everything to a non-toy codebase — not a continuation of the build.
 - **`spec/md2html.md` §8 table is stale.** It still lists Ep 5 = "Add LaTeX as a second output format" — replaced by GitHub Alerts when Ep 5 repivoted to skills. Now also doesn't reflect Ep 6 (the three GFM features added in `code/episodes/06-orchestration/initial/`). Worth a sweep next time `md2html.md` is touched.
-- **`code/episodes/05-orchestration/` legacy stub still exists** from before the repivot (when Ep 5 was originally multi-agent). Contains only a stub `agent.py` and `README.md`; no real artifacts; safe to delete. Not removed automatically — requires user confirmation since deletion is destructive.
 - **Implementation details of `md2html` itself.** Function signatures, `Token`/`Node` class layouts, extension registration mechanism, parser strategy — chosen by the subagent that implemented Ep 1's `initial/`. See subagent report in conversation history for the choices made.
 
 ## Code skeleton

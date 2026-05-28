@@ -18,7 +18,29 @@
       "WebFetch(domain:docs.anthropic.com)",
       "PowerShell(Tee-Object *)",
       "Bash(git check-ignore *)",
-      "Bash(grep -E \"\\\\.env$\")"
+      "Bash(grep -E \"\\\\.env$\")",
+      "PowerShell($env:PYTHONIOENCODING=\"utf-8\"; Push-Location \"C:\\\\Users\\\\abbus\\\\Documents\\\\rt-genai-workflows\\\\video-project-planning\\\\video-projects\\\\building-agents\\\\code\\\\episodes\\\\05-skills\\\\initial\"; python -m pytest -q 2>&1 | Select-Object -Last 15; Pop-Location)",
+      "PowerShell(New-Item *)",
+      "Bash(EP3_THRESHOLD=200000 EP5_MAX_ITER=100 python -u agent.py)",
+      "Bash(echo \"EP01 EXIT=$?\")",
+      "Bash(echo \"EP02 EXIT=$?\")",
+      "Bash(echo \"EP03 EXIT=$?\")",
+      "Bash(echo \"EP04 EXIT=$?\")",
+      "Bash(cp -r 05-skills/sandbox 06-orchestration/initial)",
+      "Bash(rm -rf 06-orchestration/initial/__pycache__ 06-orchestration/initial/md2html/__pycache__ 06-orchestration/initial/md2html/extensions/__pycache__ 06-orchestration/initial/tests/__pycache__)",
+      "Bash(mkdir -p 06-orchestration/initial/.agents)",
+      "Bash(EP3_THRESHOLD=200000 EP5_MAX_ITER=50 EP6_MAX_WORKER_ITER=60 python -u agent.py)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(grep -A2 '\\\\[orch\\\\]$' run.log)",
+      "Bash(echo \"delegate_calls in metrics: $\\(grep -A2 '\\\\[orch\\\\]$' run.log)",
+      "Bash(echo \"v2 EXIT=$?\")",
+      "Bash(grep -vE \"initial/|^episodes/05-skills/agent\\\\.py$\")",
+      "Bash(grep -iE \"\\\\.log$|run.*\\\\.txt$|trajectories\")",
+      "Bash(grep -vE \"initial/|^episodes/06-orchestration/agent\\\\.py$\")",
+      "Bash(grep -E \"pytest_cache|ruff_cache|__pycache__|\\\\.pyc$\")",
+      "Bash(grep -iE \"sandbox|__pycache__|\\\\.pyc$|pytest_cache|ruff_cache\")",
+      "Bash(git config *)",
+      "PowerShell(git status; \"---DIFFSTAT---\"; git diff --stat)"
     ]
   }
 }
