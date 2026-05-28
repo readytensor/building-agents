@@ -6,7 +6,7 @@
 - `write_plan(steps)` — Claude Code TodoWrite-style structured plan that lives in agent state (`CURRENT_PLAN` global) and is injected into the system prompt each iteration. Persistent across compaction.
 - `think(thought)` — a no-op tool that echoes the thought back. Forces externalized reasoning before action.
 
-Reflection (loop-detection that injects a "reconsider" prompt on tool errors or repeated calls) was tried during development and cut — it produced false positives without catching real spirals.
+Reflection (loop-detection that injects a "reconsider" prompt on errors or repeated calls) is deliberately not included — in practice it tends to produce false positives without catching real spirals.
 
 **Code:**
 - `agent.py` — Ep 3's agent + the two new tools + plan injection in the system prompt
@@ -23,6 +23,3 @@ The agent's task: implement reference-style markdown link support so all tests p
 
 **Full context:**
 - `../../README.md` — companion code repo overview
-- `../../../README.md` — planning workspace (series plan)
-- `../../../spec/md2html.md` — toy codebase spec
-- `../../../spec/episode-04.md` — Ep 4 design spec (matches what was built)

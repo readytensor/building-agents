@@ -4,7 +4,7 @@ Episode 1 — The Loop
 Minimal agent: a while-loop calling a single `bash` tool until the model stops
 requesting tool calls. Naive stop condition. ~80 lines.
 
-See ../../README.md and ../../../spec/md2html.md for context.
+See ../../README.md for context.
 """
 import json
 import os
@@ -29,7 +29,10 @@ shutil.copytree(INITIAL, SANDBOX)
 # --- 2. LLM client. The openai package targets any OpenAI-compatible endpoint.
 load_dotenv(Path("../../.env"))
 BASE_URL = os.environ.get("OPENAI_BASE_URL") or ""
-API_KEY = os.environ.get("ANTHROPIC_API_KEY") if "anthropic" in BASE_URL else os.environ.get("OPENAI_API_KEY")
+if "anthropic" in BASE_URL:
+    API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+else:
+    API_KEY = os.environ.get("OPENAI_API_KEY")
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-5-mini")
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL or None)
 
@@ -46,13 +49,14 @@ def bash(command: str) -> str:
     model is the sandbox boundary (cwd bounded to a fresh copy of initial/),
     not the subprocess argument shape.
     """
-    result = subprocess.run(  # noqa: S602  # nosec
+    result = subprocess.run(
         command, shell=True, capture_output=True, text=True,
         cwd=SANDBOX, timeout=30,
         encoding="utf-8", errors="replace",
         check=False,
     )
-    return (result.stdout + result.stderr).strip() or "(no output)"
+    output = (result.stdout + result.stderr).strip()
+    return output or "(no output)"
 
 BASH_TOOL = {
     "type": "function",
@@ -100,7 +104,10 @@ while True:
         args = json.loads(tc.function.arguments)
         print(f"> bash({args['command']!r})")
         result = bash(**args)
-        preview = result if len(result) < 400 else result[:400] + "...[truncated]"
+        if len(result) < 400:
+            preview = result
+        else:
+            preview = result[:400] + "...[truncated]"
         print(f"  {preview}\n")
         messages.append({
             "role": "tool", "tool_call_id": tc.id, "content": result,

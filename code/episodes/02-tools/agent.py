@@ -6,7 +6,7 @@ tiny @tool decorator (~25 lines) that builds the JSON-schema tool definition
 from a Python function's signature. Naive stop condition is still in place;
 done tool arrives in Ep 3.
 
-See ../../README.md and ../../../spec/episode-02.md for context.
+See ../../README.md for context.
 """
 import inspect
 import json
@@ -33,7 +33,10 @@ shutil.copytree(INITIAL, SANDBOX)
 # --- 2. LLM client.
 load_dotenv(Path("../../.env"))
 BASE_URL = os.environ.get("OPENAI_BASE_URL") or ""
-API_KEY = os.environ.get("ANTHROPIC_API_KEY") if "anthropic" in BASE_URL else os.environ.get("OPENAI_API_KEY")
+if "anthropic" in BASE_URL:
+    API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+else:
+    API_KEY = os.environ.get("OPENAI_API_KEY")
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-5-mini")
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL or None)
 
@@ -96,7 +99,8 @@ def read(path: str) -> str:
     if p.is_dir():
         return f"Error: {path} is a directory. Use bash to list its contents."
     lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-    return "\n".join(f"{i+1:5d}\t{line}" for i, line in enumerate(lines))
+    numbered = [f"{i+1:5d}\t{line}" for i, line in enumerate(lines)]
+    return "\n".join(numbered)
 
 
 @tool("Write content to a file, overwriting any existing content. Creates parent directories.")
@@ -138,7 +142,8 @@ def grep(pattern: str, path: str = ".") -> str:
     results = []
     for f in files:
         try:
-            for i, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            text = f.read_text(encoding="utf-8", errors="replace")
+            for i, line in enumerate(text.splitlines(), 1):
                 if regex.search(line):
                     rel = f.relative_to(SANDBOX)
                     results.append(f"{rel}:{i}: {line[:200]}")
@@ -186,10 +191,10 @@ while True:
     resp = client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOL_DEFS,
     )
-    u = resp.usage
-    total_in += u.prompt_tokens
-    total_out += u.completion_tokens
-    print(f"  [iter {iteration}: in={u.prompt_tokens}, out={u.completion_tokens}]\n")
+    usage = resp.usage
+    total_in += usage.prompt_tokens
+    total_out += usage.completion_tokens
+    print(f"  [iter {iteration}: in={usage.prompt_tokens}, out={usage.completion_tokens}]\n")
 
     msg = resp.choices[0].message
     messages.append(msg.model_dump(exclude_none=True))
@@ -203,7 +208,13 @@ while True:
         try:
             fn = TOOLS_BY_NAME[tc.function.name]
             args = json.loads(tc.function.arguments)
-            arg_preview = ", ".join(f"{k}={v!r}" if len(repr(v)) < 60 else f"{k}=<{len(str(v))} chars>" for k, v in args.items())
+            parts = []
+            for k, v in args.items():
+                if len(repr(v)) < 60:
+                    parts.append(f"{k}={v!r}")
+                else:
+                    parts.append(f"{k}=<{len(str(v))} chars>")
+            arg_preview = ", ".join(parts)
             print(f"> {tc.function.name}({arg_preview})")
             result = fn(**args)
         except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:

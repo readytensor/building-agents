@@ -8,11 +8,11 @@ Adds two paired additions to Ep 2's agent:
    COMPACTION_THRESHOLD, the older middle of the message history gets
    summarized via a second LLM call and replaced with one summary message.
 
-The system prompt gets its only series evolution (one sentence). All other
+The system prompt gets one new sentence (call done() when complete). All other
 prior behavior is unchanged: same 5 tools, same @tool decorator, same
 sandbox reset, same provider-agnostic OpenAI SDK setup.
 
-See ../../README.md and ../../../spec/episode-03.md for context.
+See ../../README.md for context.
 """
 import inspect
 import json
@@ -39,14 +39,17 @@ shutil.copytree(INITIAL, SANDBOX)
 # --- 2. LLM client.
 load_dotenv(Path("../../.env"))
 BASE_URL = os.environ.get("OPENAI_BASE_URL") or ""
-API_KEY = os.environ.get("ANTHROPIC_API_KEY") if "anthropic" in BASE_URL else os.environ.get("OPENAI_API_KEY")
+if "anthropic" in BASE_URL:
+    API_KEY = os.environ.get("ANTHROPIC_API_KEY")
+else:
+    API_KEY = os.environ.get("OPENAI_API_KEY")
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-5-mini")
 client = OpenAI(api_key=API_KEY, base_url=BASE_URL or None)
 
-# --- Knobs for compaction. Env-overridable for sweep experiments; defaults are the spec.
+# --- Compaction knobs. Env-overridable; defaults shown below.
 COMPACTION_THRESHOLD = int(os.environ.get("EP3_THRESHOLD", 30_000))  # input tokens per single LLM call.
 KEEP_LAST_ITERATIONS = int(os.environ.get("EP3_KEEP", 4))            # recent assistant rounds preserved uncompacted.
-MAX_ITERATIONS = int(os.environ.get("EP3_MAX_ITER", 150))  # safety cap to prevent runaway costs.
+MAX_ITERATIONS = int(os.environ.get("EP3_MAX_ITER", 150))  # safety cap to prevent an infinite loop.
 
 
 # --- 3. The @tool decorator.
@@ -96,13 +99,14 @@ def done(message: str) -> str:
 # --- 5. The five working tools. All paths resolve inside SANDBOX.
 def _safe_path(path: str) -> Path:
     resolved = (SANDBOX / path).resolve()
+    # raises ValueError if path escapes SANDBOX (path-traversal guard)
     resolved.relative_to(SANDBOX.resolve())
     return resolved
 
 
 @tool("Execute a shell command in the working directory and return its output.")
 def bash(command: str) -> str:
-    result = subprocess.run(  # noqa: S602  # nosec
+    result = subprocess.run(
         command, shell=True, capture_output=True, text=True,
         cwd=SANDBOX, timeout=30,
         encoding="utf-8", errors="replace",
@@ -119,7 +123,10 @@ def read(path: str) -> str:
     if p.is_dir():
         return f"Error: {path} is a directory. Use bash to list its contents."
     lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-    return "\n".join(f"{i+1:5d}\t{line}" for i, line in enumerate(lines))
+    numbered = []
+    for i, line in enumerate(lines):
+        numbered.append(f"{i+1:5d}\t{line}")
+    return "\n".join(numbered)
 
 
 @tool("Write content to a file, overwriting any existing content. Creates parent directories.")
@@ -161,7 +168,8 @@ def grep(pattern: str, path: str = ".") -> str:
     results = []
     for f in files:
         try:
-            for i, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            text = f.read_text(encoding="utf-8", errors="replace")
+            for i, line in enumerate(text.splitlines(), 1):
                 if regex.search(line):
                     rel = f.relative_to(SANDBOX)
                     results.append(f"{rel}:{i}: {line[:200]}")
@@ -199,7 +207,10 @@ def _format_as_transcript(messages):
         if role == "assistant":
             tcs = m.get("tool_calls") or []
             if tcs:
-                tc_lines = [f"  → {tc['function']['name']}({tc['function']['arguments']})" for tc in tcs]
+                tc_lines = []
+                for tc in tcs:
+                    fn = tc["function"]
+                    tc_lines.append(f"  → {fn['name']}({fn['arguments']})")
                 out.append(f"ASSISTANT: {content}\n" + "\n".join(tc_lines))
             else:
                 out.append(f"ASSISTANT: {content}")
@@ -292,10 +303,13 @@ try:
             try:
                 fn = TOOLS_BY_NAME[tc.function.name]
                 args = json.loads(tc.function.arguments)
-                arg_preview = ", ".join(
-                    f"{k}={v!r}" if len(repr(v)) < 60 else f"{k}=<{len(str(v))} chars>"
-                    for k, v in args.items()
-                )
+                parts = []
+                for k, v in args.items():
+                    if len(repr(v)) < 60:
+                        parts.append(f"{k}={v!r}")
+                    else:
+                        parts.append(f"{k}=<{len(str(v))} chars>")
+                arg_preview = ", ".join(parts)
                 print(f"> {tc.function.name}({arg_preview})")
                 result = fn(**args)
             except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:

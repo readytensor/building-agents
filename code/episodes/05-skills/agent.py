@@ -29,8 +29,8 @@ New additions on top of Ep 4:
 
 Two skills ship in `initial/.skills/`:
 - `research` — when you need info you don't have in training
-- `verification` — pre-done() discipline (folds in the Eps 3-4
-  done()-reliability gap)
+- `verification` — lint + coverage checks to run before signalling
+  completion
 
 Everything else inherited from Ep 4: planning + think, 5 working
 tools, done, compaction, sandbox reset.
@@ -45,10 +45,6 @@ shipping to the openai-SDK published code:
     implementation against a real search API, or kept as an MCP
     tool, when shipping)
 See ../../../CLAUDE.md.
-
-See ../../README.md and ../../../spec/episode-05.md for context.
-See ../../../tmp/skills-library/README.md for the broader library
-of skills this series is building.
 """
 import inspect
 import json
@@ -151,7 +147,10 @@ def read(path: str) -> str:
     if p.is_dir():
         return f"Error: {path} is a directory. Use bash to list its contents."
     lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-    return "\n".join(f"{i+1:5d}\t{line}" for i, line in enumerate(lines))
+    numbered = []
+    for i, line in enumerate(lines):
+        numbered.append(f"{i+1:5d}\t{line}")
+    return "\n".join(numbered)
 
 
 @tool("Write content to a file, overwriting any existing content. Creates parent directories.")
@@ -193,7 +192,8 @@ def grep(pattern: str, path: str = ".") -> str:
     results = []
     for f in files:
         try:
-            for i, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            content = f.read_text(encoding="utf-8", errors="replace")
+            for i, line in enumerate(content.splitlines(), 1):
                 if regex.search(line):
                     rel = f.relative_to(SANDBOX)
                     results.append(f"{rel}:{i}: {line[:200]}")
@@ -384,7 +384,7 @@ def fetch_url(url: str) -> str:
     try:
         req = urllib.request.Request(
             url,
-            headers={"User-Agent": "ep05-agent/1.0"},
+            headers={"User-Agent": "md2html-agent/1.0"},
         )
         with urllib.request.urlopen(req, timeout=15) as resp:  # noqa: S310
             body = resp.read()
@@ -534,9 +534,13 @@ def _format_as_transcript(messages):
             elif btype == "tool_result":
                 tc = b.get("content", "")
                 if isinstance(tc, list):
-                    tc = " ".join(
-                        x.get("text", "") if isinstance(x, dict) else str(x) for x in tc
-                    )
+                    parts = []
+                    for x in tc:
+                        if isinstance(x, dict):
+                            parts.append(x.get("text", ""))
+                        else:
+                            parts.append(str(x))
+                    tc = " ".join(parts)
                 tc = str(tc)
                 preview = tc if len(tc) < 500 else tc[:500] + "...[truncated]"
                 tool_result_lines.append(f"TOOL RESULT: {preview}")
@@ -610,6 +614,20 @@ def _block_to_dict(b):
     return b.model_dump()
 
 
+def _preview_args(d) -> str:
+    """Render a tool's input dict as a short, log-friendly preview string.
+
+    Short values are shown inline; long values are summarized by length.
+    """
+    parts = []
+    for k, v in (d or {}).items():
+        if len(repr(v)) < 60:
+            parts.append(f"{k}={v!r}")
+        else:
+            parts.append(f"{k}=<{len(str(v))} chars>")
+    return ", ".join(parts)
+
+
 # --- 13. The agent loop.
 SYSTEM = (
     "You are a coding assistant operating inside a sandboxed working "
@@ -619,15 +637,6 @@ SYSTEM = (
     "of what you did."
 )
 
-# Task wording strengthened 2026-05-24 after first two recorded runs.
-# v1 (weak wording) — soft "make sure you check the docs" undermined
-# by the immediately-following "here's the test fixture showing the
-# expected behavior" — the agent reasonably interpreted the fixture
-# as the answer and treated the docs-check as optional. v1 ran 71
-# iters with 1 web_search; v2 ran 49+ iters with 0 web_search calls.
-# Strong wording below explicitly devalues the fixture, mandates
-# web_search FIRST, and gives the agent permission to fix the fixture
-# if it disagrees with the docs. See spec/episode-05.md §6 & §7.
 TASK = """I want to add support for GitHub-flavored alerts to md2html.
 They look like this:
 
@@ -670,8 +679,7 @@ loaded_skill_names: list[str] = []
 # Server-side tool counters (e.g., Anthropic's web_search). These show up as
 # `server_tool_use` blocks in resp.content — distinct from regular `tool_use`
 # blocks the agent loop dispatches. Without explicit counting, server-tool
-# usage is invisible in the metrics (this was an instrumentation bug in the
-# first Ep 5 run — see ../../spec/episode-05.md §7).
+# usage is invisible in the metrics.
 server_tool_calls: dict[str, int] = {}
 
 try:
@@ -712,10 +720,7 @@ try:
         # via _block_to_dict's pydantic-dump fallback.
         for stu in resp.content:
             if stu.type == "server_tool_use":
-                arg_preview = ", ".join(
-                    f"{k}={v!r}" if len(repr(v)) < 60 else f"{k}=<{len(str(v))} chars>"
-                    for k, v in (stu.input or {}).items()
-                )
+                arg_preview = _preview_args(stu.input)
                 print(f"> [server] {stu.name}({arg_preview})")
                 server_tool_calls[stu.name] = server_tool_calls.get(stu.name, 0) + 1
 
@@ -738,10 +743,7 @@ try:
             try:
                 fn = TOOLS_BY_NAME[tu.name]
                 args = tu.input or {}
-                arg_preview = ", ".join(
-                    f"{k}={v!r}" if len(repr(v)) < 60 else f"{k}=<{len(str(v))} chars>"
-                    for k, v in args.items()
-                )
+                arg_preview = _preview_args(args)
                 print(f"> {tu.name}({arg_preview})")
                 result = fn(**args)
                 if tu.name == "write_plan":

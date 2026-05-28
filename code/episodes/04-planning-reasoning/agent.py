@@ -13,8 +13,8 @@ Adds two reasoning-strategy tools to Ep 3's agent:
    hard problems and architectural decisions.
 
 The two tools have distinct purposes — see their descriptions in the
-@tool docstrings. The episode's main demo focuses on planning; think
-is included as a related pattern producers should know exists.
+@tool docstrings. The main example here focuses on planning; think
+is included as a related pattern worth knowing about.
 
 Everything else is unchanged from Ep 3: 6 working tools (bash/read/write/
 edit/grep/done), @tool decorator, sandbox reset, compaction.
@@ -26,7 +26,7 @@ use the openai SDK against Chat Completions for provider portability;
 the published companion code will be translated back to that shape
 before shipping. See ../../../CLAUDE.md for the locked decision.
 
-See ../../README.md and ../../../spec/episode-04.md for context.
+See ../../README.md for context.
 """
 import inspect
 import json
@@ -126,7 +126,10 @@ def read(path: str) -> str:
     if p.is_dir():
         return f"Error: {path} is a directory. Use bash to list its contents."
     lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-    return "\n".join(f"{i+1:5d}\t{line}" for i, line in enumerate(lines))
+    numbered = []
+    for i, line in enumerate(lines):
+        numbered.append(f"{i+1:5d}\t{line}")
+    return "\n".join(numbered)
 
 
 @tool("Write content to a file, overwriting any existing content. Creates parent directories.")
@@ -168,7 +171,8 @@ def grep(pattern: str, path: str = ".") -> str:
     results = []
     for f in files:
         try:
-            for i, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            text = f.read_text(encoding="utf-8", errors="replace")
+            for i, line in enumerate(text.splitlines(), 1):
                 if regex.search(line):
                     rel = f.relative_to(SANDBOX)
                     results.append(f"{rel}:{i}: {line[:200]}")
@@ -255,9 +259,9 @@ TOOL_DEFS = [t.tool_definition for t in TOOLS]
 # plus top-level `cache_control` for AUTOMATIC rolling-window caching
 # of the growing message history. The automatic mode is what Anthropic
 # recommends for multi-turn agents — it handles 20-block lookback and
-# threshold rules internally instead of forcing us to track them.
-# An earlier hand-rolled `_with_rolling_cache` on messages[-1] broke
-# at iter 7 of long agent runs; see tmp/runs/ep04 for the trail.
+# threshold rules internally instead of tracking them by hand.
+# A hand-rolled `_with_rolling_cache` on messages[-1] is fragile across
+# long runs, which is why the automatic mode is preferred here.
 
 def _system_cached():
     # System has two parts: a stable base (cached) plus an optional
@@ -315,9 +319,13 @@ def _format_as_transcript(messages):
             elif btype == "tool_result":
                 tc = b.get("content", "")
                 if isinstance(tc, list):
-                    tc = " ".join(
-                        x.get("text", "") if isinstance(x, dict) else str(x) for x in tc
-                    )
+                    parts = []
+                    for x in tc:
+                        if isinstance(x, dict):
+                            parts.append(x.get("text", ""))
+                        else:
+                            parts.append(str(x))
+                    tc = " ".join(parts)
                 tc = str(tc)
                 preview = tc if len(tc) < 500 else tc[:500] + "...[truncated]"
                 tool_result_lines.append(f"TOOL RESULT: {preview}")
@@ -339,10 +347,11 @@ def _format_as_transcript(messages):
 def _extract_text(content):
     if isinstance(content, str):
         return content
-    return " ".join(
-        b.get("text", "") for b in content
-        if isinstance(b, dict) and b.get("type") == "text"
-    )
+    parts = []
+    for b in content:
+        if isinstance(b, dict) and b.get("type") == "text":
+            parts.append(b.get("text", ""))
+    return " ".join(parts)
 
 
 def compact(messages):
@@ -470,10 +479,13 @@ try:
             try:
                 fn = TOOLS_BY_NAME[tu.name]
                 args = tu.input or {}
-                arg_preview = ", ".join(
-                    f"{k}={v!r}" if len(repr(v)) < 60 else f"{k}=<{len(str(v))} chars>"
-                    for k, v in args.items()
-                )
+                parts = []
+                for k, v in args.items():
+                    if len(repr(v)) < 60:
+                        parts.append(f"{k}={v!r}")
+                    else:
+                        parts.append(f"{k}=<{len(str(v))} chars>")
+                arg_preview = ", ".join(parts)
                 print(f"> {tu.name}({arg_preview})")
                 result = fn(**args)
                 if tu.name == "write_plan":

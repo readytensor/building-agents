@@ -36,10 +36,6 @@ Everything else inherited from Ep 5: skills system, planning + think,
 NOTE — DEV-TIME SDK SWAP (2026-05-25):
 Continues Eps 4/5's pattern — native Anthropic SDK + prompt caching during
 development. Translate to openai SDK when shipping; drop cache_control.
-
-See ../../README.md and ../../../spec/episode-06.md for context.
-See ../../../tmp/skills-library/README.md for the skill library this
-episode's worker configs draw on.
 """
 import inspect
 import itertools
@@ -96,10 +92,35 @@ def _print(label: str, text: str) -> None:
             print(f"[{label}] {line}", flush=True)
 
 
+def _preview_args(args: dict) -> str:
+    """Render a tool call's args for the transcript: each value inline if its
+    repr is short, otherwise summarized as a char count."""
+    parts = []
+    for k, v in (args or {}).items():
+        if len(repr(v)) < 60:
+            parts.append(f"{k}={v!r}")
+        else:
+            parts.append(f"{k}=<{len(str(v))} chars>")
+    return ", ".join(parts)
+
+
+def _truncate(text: str, limit: int = 400) -> str:
+    """Truncate a tool-result string for transcript display."""
+    if len(text) < limit:
+        return text
+    return text[:limit] + "...[truncated]"
+
+
 # --- 3. The @tool decorator (Anthropic shape, unchanged from Ep 5).
 def tool(description: str):
-    json_types = {str: "string", int: "integer", float: "number", bool: "boolean",
-                  list: "array", dict: "object"}
+    json_types = {
+        str: "string",
+        int: "integer",
+        float: "number",
+        bool: "boolean",
+        list: "array",
+        dict: "object",
+    }
 
     def decorator(func):
         sig = inspect.signature(func)
@@ -161,7 +182,8 @@ def read(path: str) -> str:
     if p.is_dir():
         return f"Error: {path} is a directory. Use bash to list its contents."
     lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
-    return "\n".join(f"{i+1:5d}\t{line}" for i, line in enumerate(lines))
+    numbered = [f"{i+1:5d}\t{line}" for i, line in enumerate(lines)]
+    return "\n".join(numbered)
 
 
 @tool("Write content to a file, overwriting any existing content. Creates parent directories.")
@@ -203,7 +225,8 @@ def grep(pattern: str, path: str = ".") -> str:
     results = []
     for f in files:
         try:
-            for i, line in enumerate(f.read_text(encoding="utf-8", errors="replace").splitlines(), 1):
+            file_lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+            for i, line in enumerate(file_lines, 1):
                 if regex.search(line):
                     rel = f.relative_to(SANDBOX)
                     results.append(f"{rel}:{i}: {line[:200]}")
@@ -523,7 +546,13 @@ def _format_as_transcript(messages):
             elif btype == "tool_result":
                 tc = b.get("content", "")
                 if isinstance(tc, list):
-                    tc = " ".join(x.get("text", "") if isinstance(x, dict) else str(x) for x in tc)
+                    parts = []
+                    for x in tc:
+                        if isinstance(x, dict):
+                            parts.append(x.get("text", ""))
+                        else:
+                            parts.append(str(x))
+                    tc = " ".join(parts)
                 tc = str(tc)
                 tool_result_lines.append(f"TOOL RESULT: {tc if len(tc) < 500 else tc[:500] + '...[truncated]'}")
         if role == "assistant":
@@ -575,7 +604,10 @@ def _compact(messages):
             "[End of summary. Continue with the most recent turns.]"
         ),
     }
-    return head + [summary_msg] + tail, True, summary_resp.usage.input_tokens, summary_resp.usage.output_tokens
+    new_messages = head + [summary_msg] + tail
+    in_tokens = summary_resp.usage.input_tokens
+    out_tokens = summary_resp.usage.output_tokens
+    return new_messages, True, in_tokens, out_tokens
 
 
 # --- 12. Block-to-dict helper.
@@ -732,8 +764,13 @@ def run_agent(task: str, agent_type: str) -> str:
     # Worker identity: 'orch' for the top-level orchestrator, 'wN-<type>' for
     # delegated workers. The labels make parallel stdout legible.
     is_orchestrator = (agent_type == "orchestrator")
-    label = "orch" if is_orchestrator else f"w{next(_WORKER_COUNTER)}-{agent_type}"
-    p = lambda text: _print(label, text)
+    if is_orchestrator:
+        label = "orch"
+    else:
+        label = f"w{next(_WORKER_COUNTER)}-{agent_type}"
+
+    def p(text):
+        _print(label, text)
 
     # --- Per-call state.
     plan: list[dict] = []
@@ -802,10 +839,7 @@ def run_agent(task: str, agent_type: str) -> str:
             # Surface server-tool invocations (web_search, etc.).
             for stu in resp.content:
                 if stu.type == "server_tool_use":
-                    arg_preview = ", ".join(
-                        f"{k}={v!r}" if len(repr(v)) < 60 else f"{k}=<{len(str(v))} chars>"
-                        for k, v in (stu.input or {}).items()
-                    )
+                    arg_preview = _preview_args(stu.input or {})
                     p(f"> [server] {stu.name}({arg_preview})")
                     metrics.server_tool_calls[stu.name] = metrics.server_tool_calls.get(stu.name, 0) + 1
 
@@ -827,10 +861,7 @@ def run_agent(task: str, agent_type: str) -> str:
                 try:
                     fn = tools_by_name[tu.name]
                     args = tu.input or {}
-                    arg_preview = ", ".join(
-                        f"{k}={v!r}" if len(repr(v)) < 60 else f"{k}=<{len(str(v))} chars>"
-                        for k, v in args.items()
-                    )
+                    arg_preview = _preview_args(args)
                     p(f"> {tu.name}({arg_preview})")
                     result = fn(**args)
                     if tu.name == "write_plan":
@@ -844,7 +875,7 @@ def run_agent(task: str, agent_type: str) -> str:
                 except (TypeError, KeyError, ValueError) as e:
                     result = f"Error executing {tu.name}: {type(e).__name__}: {e}"
                     p(f"  ! {result}")
-                preview = result if len(result) < 400 else result[:400] + "...[truncated]"
+                preview = _truncate(result)
                 p(f"  {preview}")
                 tool_results[idx] = {
                     "type": "tool_result",
@@ -862,7 +893,7 @@ def run_agent(task: str, agent_type: str) -> str:
                     p(f"> delegate(agent_type={args.get('agent_type')!r}, "
                       f"task=<{len(str(args.get('task','')))}chars>)")
                     result = delegate(**args)
-                    preview = result if len(result) < 400 else result[:400] + "...[truncated]"
+                    preview = _truncate(result)
                     p(f"  {preview}")
                     idx = tool_uses.index(tu)
                     tool_results[idx] = {
@@ -886,7 +917,7 @@ def run_agent(task: str, agent_type: str) -> str:
                                 result = fut.result()
                             except Exception as e:
                                 result = f"Error in worker delegate: {type(e).__name__}: {e}"
-                            preview = result if len(result) < 400 else result[:400] + "...[truncated]"
+                            preview = _truncate(result)
                             p(f">    [done] delegate({tu.input.get('agent_type')!r}): {preview}")
                             idx = tool_uses.index(tu)
                             tool_results[idx] = {

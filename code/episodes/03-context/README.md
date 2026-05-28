@@ -6,7 +6,7 @@
 
 **Code:**
 - `agent.py` — Ep 2's agent + the additions above
-- `initial/` — `md2html` ready for a multi-file refactor (TBD)
+- `initial/` — `md2html` ready for a multi-file refactor
 - `sandbox/` — gitignored, recreated on every run
 
 **Run:**
@@ -17,5 +17,3 @@ python agent.py
 
 **Full context:**
 - `../../README.md` — companion code repo overview
-- `../../../README.md` — planning workspace (series plan)
-- `../../../spec/md2html.md` — toy codebase spec

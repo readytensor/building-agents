@@ -23,5 +23,3 @@ diff -r initial sandbox
 
 **Full context:**
 - `../../README.md` — companion code repo overview
-- `../../../README.md` — planning workspace (series plan)
-- `../../../spec/md2html.md` — toy codebase spec
