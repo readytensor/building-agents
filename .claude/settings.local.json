@@ -40,7 +40,13 @@
       "Bash(grep -E \"pytest_cache|ruff_cache|__pycache__|\\\\.pyc$\")",
       "Bash(grep -iE \"sandbox|__pycache__|\\\\.pyc$|pytest_cache|ruff_cache\")",
       "Bash(git config *)",
-      "PowerShell(git status; \"---DIFFSTAT---\"; git diff --stat)"
+      "PowerShell(git status; \"---DIFFSTAT---\"; git diff --stat)",
+      "Bash(ls -la episodes/01-loop/logs/)",
+      "Bash(ls -la episodes/01-loop/tool_calls.jsonl)",
+      "PowerShell(git *)",
+      "PowerShell(git -C $repo add .claude/settings.local.json)",
+      "PowerShell(git -C $repo push)",
+      "PowerShell($repo = \"C:\\\\Users\\\\abbus\\\\Documents\\\\rt-genai-workflows\\\\video-project-planning\\\\video-projects\\\\building-agents\")"
     ]
   }
 }
