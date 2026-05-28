@@ -31,6 +31,17 @@ python agent.py
 
 Each episode is self-contained. The agent operates on `episodes/<ep>/sandbox/`, which is freshly copied from `episodes/<ep>/initial/` on every run (the reset is in the first 5 lines of every `agent.py`).
 
+### Capturing a run
+
+To save everything the agent prints — handy for reviewing or debugging a run afterwards — launch it through `capture.py` instead of running `agent.py` directly:
+
+```bash
+cd episodes/01-loop
+python ../../capture.py            # or, from the code/ root: python capture.py episodes/01-loop
+```
+
+It mirrors the agent's output to your terminal live **and** writes a timestamped log to `episodes/<ep>/logs/` (gitignored): a human-readable `run-<timestamp>.log` (each line prefixed with elapsed time, e.g. `[+ 12.34s]`) and a `run-<timestamp>.jsonl` of `{"t", "text"}` records for replay/summarization tooling. Works the same on every episode and every platform.
+
 After a run, inspect what the agent did:
 
 ```bash
