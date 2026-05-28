@@ -31,20 +31,45 @@ python agent.py
 
 Each episode is self-contained. The agent operates on `episodes/<ep>/sandbox/`, which is freshly copied from `episodes/<ep>/initial/` on every run (the reset is in the first 5 lines of every `agent.py`).
 
-### Capturing a run
+### Recording a run
 
-To save everything the agent prints — handy for reviewing or debugging a run afterwards — launch it through `capture.py` instead of running `agent.py` directly:
+`run.py` runs an episode as a fresh **run**: it creates a new folder `<cwd>/logs/<timestamp>/` (gitignored, never overwritten), runs the agent, and moves the agent's `tool_calls.jsonl` into that folder. Add `--capture` to also record the terminal output there.
 
 ```bash
 cd episodes/01-loop
-python ../../capture.py                  # defaults to: python -u agent.py
+python ../../run.py                       # a run: collects tool_calls.jsonl into logs/<timestamp>/
+python ../../run.py --capture             # also save the terminal (terminal.log + terminal.jsonl)
 ```
 
-It mirrors the agent's output to your terminal live **and** writes each run to its own folder `<cwd>/logs/<timestamp>/` (gitignored), so runs never overwrite each other. Each folder holds `terminal.log` (human-readable, each line prefixed with elapsed time, e.g. `[+ 12.34s]`), `terminal.jsonl` (`{"t", "text"}` records for later inspection), and the run's `tool_calls.jsonl` (collected from the agent — see below). Works the same on every episode and every platform.
+Run **any** episode through `run.py` from the `code/` root with `--cwd`.
 
-`capture.py` runs any command, not just `agent.py` — e.g. `python capture.py -- pytest -q` or `python capture.py --cwd episodes/03-context`.
+Run (records `tool_calls.jsonl` only):
 
-Separately, from Episode 2 onward the agent records its own **tool-call telemetry**: at the end of a run it prints a summary (how many tools it called, in what order) and writes the full sequence to `tool_calls.jsonl`. When run through `capture.py`, that file is moved into the run folder, so each run's path is preserved. The number and order of calls varies run to run — that variance is itself a topic the series returns to.
+```bash
+python run.py --cwd episodes/01-loop                 # Episode 1 — the loop
+python run.py --cwd episodes/02-tools                # Episode 2 — tools + @tool
+python run.py --cwd episodes/03-context              # Episode 3 — compaction + done
+python run.py --cwd episodes/04-planning-reasoning   # Episode 4 — planning + think
+python run.py --cwd episodes/05-skills               # Episode 5 — skills
+python run.py --cwd episodes/06-orchestration        # Episode 6 — orchestration
+```
+
+Run **and capture the terminal** (also writes `terminal.log` + `terminal.jsonl`):
+
+```bash
+python run.py --capture --cwd episodes/01-loop                 # Episode 1 — the loop
+python run.py --capture --cwd episodes/02-tools                # Episode 2 — tools + @tool
+python run.py --capture --cwd episodes/03-context              # Episode 3 — compaction + done
+python run.py --capture --cwd episodes/04-planning-reasoning   # Episode 4 — planning + think
+python run.py --capture --cwd episodes/05-skills               # Episode 5 — skills
+python run.py --capture --cwd episodes/06-orchestration        # Episode 6 — orchestration
+```
+
+Because each run gets its own folder, you can run the same task repeatedly and compare how the agent's path and tool-call count differ — that run-to-run variance is itself a topic the series returns to. The episodes stay self-contained: `python agent.py` still works on its own (it just overwrites `tool_calls.jsonl` each time); `run.py` is the harness around it and can run any episode.
+
+`capture.py` is the underlying terminal recorder — one job: run a command and tee its output to a log dir. `run.py` uses it for `--capture`, and it works standalone on any command too, e.g. `python capture.py -- pytest -q`.
+
+From Episode 2 onward the agent records its own **tool-call telemetry**: at the end of a run it prints a summary (how many tools it called, in what order) and writes the full sequence to `tool_calls.jsonl`.
 
 After a run, inspect what the agent did:
 
