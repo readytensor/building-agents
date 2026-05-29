@@ -424,6 +424,35 @@ def write_tool_telemetry():
             f.write(json.dumps(call) + "\n")
 
 
+def write_metrics():
+    """Write this run's token usage to metrics.json. Recording only — the
+    harness (run.py) reads this and renders the summary. Records cache and
+    compaction tokens and the reasoning-tool counts so the harness can show
+    them; with prompt caching, per_iter carries [in, out, cache_w, cache_r]."""
+    metrics = {
+        "agents": [{
+            "label": "agent",
+            "iterations": iteration,
+            "input_tokens": total_in,
+            "output_tokens": total_out,
+            "cache_write": total_cache_w,
+            "cache_read": total_cache_r,
+            "compactions": compactions_fired,
+            "compact_in": compact_in,
+            "compact_out": compact_out,
+            "reasoning": {"write_plan": plan_writes, "think": think_calls},
+            "per_iter": per_iter,
+        }],
+        "inputs": {"system": SYSTEM, "task": TASK},
+        "config": {
+            "COMPACTION_THRESHOLD": COMPACTION_THRESHOLD,
+            "KEEP_LAST_ITERATIONS": KEEP_LAST_ITERATIONS,
+        },
+    }
+    with open("metrics.json", "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+
+
 # --- 12. The agent loop.
 SYSTEM = (
     "You are a coding assistant operating inside a sandboxed working "
@@ -462,6 +491,7 @@ iteration = 0
 compactions_fired = 0
 plan_writes = 0
 think_calls = 0
+per_iter = []
 
 try:
     while iteration < MAX_ITERATIONS:
@@ -482,8 +512,7 @@ try:
         total_out += u.output_tokens
         total_cache_w += cw
         total_cache_r += cr
-        print(f"  [iter {iteration}: in={u.input_tokens}, out={u.output_tokens}, "
-              f"cache_w={cw}, cache_r={cr}]\n")
+        per_iter.append([u.input_tokens, u.output_tokens, cw, cr])
 
         # Persist the assistant turn.
         assistant_blocks = [_block_to_dict(b) for b in resp.content]
@@ -546,17 +575,5 @@ try:
 except TaskComplete as e:
     print(f"\n=== TASK COMPLETE ===\n\n{e.message}")
 
-print(f"\n=== TOKEN USAGE ===")
-print(f"agent calls:        iterations={iteration}  input={total_in:,}  output={total_out:,}")
-print(f"cache:              write={total_cache_w:,}  read={total_cache_r:,}")
-print(f"compaction calls:   count={compactions_fired}  input={compact_in:,}  output={compact_out:,}")
-print(f"TOTAL:              input={total_in + compact_in:,}  output={total_out + compact_out:,}  "
-      f"grand_total={total_in + total_out + compact_in + compact_out:,}")
-print(f"\n=== REASONING STRATEGY USAGE ===")
-print(f"write_plan calls:   {plan_writes}")
-print(f"think calls:        {think_calls}")
-print(f"final plan state:\n{_format_plan(CURRENT_PLAN)}")
-
 write_tool_telemetry()
-
-print(f"\nconfig: COMPACTION_THRESHOLD={COMPACTION_THRESHOLD:,}  KEEP_LAST_ITERATIONS={KEEP_LAST_ITERATIONS}")
+write_metrics()

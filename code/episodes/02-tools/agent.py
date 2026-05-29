@@ -102,6 +102,24 @@ def write_tool_telemetry():
             f.write(json.dumps(call) + "\n")
 
 
+def write_metrics():
+    """Write this run's token usage to metrics.json. Recording only — the
+    harness (run.py) reads this and renders the summary, so the agent stays
+    minimal and all usage reporting lives in one place."""
+    metrics = {
+        "agents": [{
+            "label": "agent",
+            "iterations": iteration,
+            "input_tokens": total_in,
+            "output_tokens": total_out,
+            "per_iter": per_iter,  # [input, output] for each LLM call
+        }],
+        "inputs": {"system": SYSTEM, "task": TASK},
+    }
+    with open("metrics.json", "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+
+
 @tool("Execute a shell command in the working directory and return its output.")
 def bash(command: str) -> str:
     result = subprocess.run(  # noqa: S602  # nosec
@@ -207,6 +225,7 @@ print(f"USER: {TASK}\n")
 
 total_in = total_out = 0
 iteration = 0
+per_iter = []
 
 while True:
     iteration += 1
@@ -216,15 +235,15 @@ while True:
     usage = resp.usage
     total_in += usage.prompt_tokens
     total_out += usage.completion_tokens
-    print(f"  [iter {iteration}: in={usage.prompt_tokens}, out={usage.completion_tokens}]\n")
+    per_iter.append([usage.prompt_tokens, usage.completion_tokens])
 
     msg = resp.choices[0].message
     messages.append(msg.model_dump(exclude_none=True))
 
     if not msg.tool_calls:
         print(f"\n=== FINAL RESPONSE ===\n\n{msg.content or ''}")
-        print(f"\n=== TOKEN USAGE ===\niterations: {iteration}  input: {total_in:,}  output: {total_out:,}  total: {total_in + total_out:,}")
         write_tool_telemetry()
+        write_metrics()
         break
 
     for tc in msg.tool_calls:

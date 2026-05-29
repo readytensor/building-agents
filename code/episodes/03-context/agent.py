@@ -279,6 +279,31 @@ def write_tool_telemetry():
             f.write(json.dumps(call) + "\n")
 
 
+def write_metrics():
+    """Write this run's token usage to metrics.json. Recording only — the
+    harness (run.py) reads this and renders the summary. Compaction tokens are
+    recorded separately so the harness can show the agent-vs-compaction split."""
+    metrics = {
+        "agents": [{
+            "label": "agent",
+            "iterations": iteration,
+            "input_tokens": total_in,
+            "output_tokens": total_out,
+            "compactions": compactions_fired,
+            "compact_in": compact_in,
+            "compact_out": compact_out,
+            "per_iter": per_iter,  # [input, output] for each LLM call
+        }],
+        "inputs": {"system": SYSTEM, "task": TASK},
+        "config": {
+            "COMPACTION_THRESHOLD": COMPACTION_THRESHOLD,
+            "KEEP_LAST_ITERATIONS": KEEP_LAST_ITERATIONS,
+        },
+    }
+    with open("metrics.json", "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+
+
 # --- 8. The agent loop.
 SYSTEM = (
     "You are a coding assistant operating inside a sandboxed working "
@@ -302,6 +327,7 @@ total_in = total_out = 0
 compact_in = compact_out = 0
 iteration = 0
 compactions_fired = 0
+per_iter = []
 
 try:
     while iteration < MAX_ITERATIONS:
@@ -312,7 +338,7 @@ try:
         u = resp.usage
         total_in += u.prompt_tokens
         total_out += u.completion_tokens
-        print(f"  [iter {iteration}: in={u.prompt_tokens}, out={u.completion_tokens}]\n")
+        per_iter.append([u.prompt_tokens, u.completion_tokens])
 
         msg = resp.choices[0].message
         messages.append(msg.model_dump(exclude_none=True))
@@ -361,9 +387,4 @@ except TaskComplete as e:
     print(f"\n=== TASK COMPLETE ===\n\n{e.message}")
 
 write_tool_telemetry()
-
-print(f"\n=== TOKEN USAGE ===")
-print(f"agent calls:        iterations={iteration}  input={total_in:,}  output={total_out:,}")
-print(f"compaction calls:   count={compactions_fired}  input={compact_in:,}  output={compact_out:,}")
-print(f"TOTAL:              input={total_in + compact_in:,}  output={total_out + compact_out:,}  grand_total={total_in + total_out + compact_in + compact_out:,}")
-print(f"config: COMPACTION_THRESHOLD={COMPACTION_THRESHOLD:,}  KEEP_LAST_ITERATIONS={KEEP_LAST_ITERATIONS}")
+write_metrics()

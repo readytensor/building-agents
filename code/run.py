@@ -59,6 +59,119 @@ def breakdown(tools):
     return ", ".join(f"{name}×{n}" for name, n in counts.items())
 
 
+def fmt(v):
+    """Thousands-separate ints; leave everything else as-is."""
+    return f"{v:,}" if isinstance(v, int) else str(v)
+
+
+def render_single_agent(a: dict) -> None:
+    """Render usage for a single-agent run (Episodes 1-5). Only the sections
+    the episode actually recorded are shown — an episode with no cache, no
+    compaction, etc. simply omits those keys and we skip the lines."""
+    ci, co = a.get("compact_in", 0), a.get("compact_out", 0)
+    print("\n=== TOKEN USAGE ===")
+    print(f"agent calls:        iterations={a['iterations']}  "
+          f"input={a['input_tokens']:,}  output={a['output_tokens']:,}")
+    if "cache_write" in a or "cache_read" in a:
+        print(f"cache:              write={a.get('cache_write', 0):,}  read={a.get('cache_read', 0):,}")
+    if "compactions" in a:
+        print(f"compaction calls:   count={a['compactions']}  input={ci:,}  output={co:,}")
+    print(f"TOTAL:              input={a['input_tokens'] + ci:,}  "
+          f"output={a['output_tokens'] + co:,}  "
+          f"grand_total={a['input_tokens'] + a['output_tokens'] + ci + co:,}")
+
+    per_iter = a.get("per_iter")
+    if per_iter:
+        print("per-iteration in/out: " + " → ".join(f"{p[0]}/{p[1]}" for p in per_iter))
+
+    r = a.get("reasoning")
+    if r:
+        print("\n=== REASONING STRATEGY USAGE ===")
+        print(f"write_plan calls:   {r.get('write_plan', 0)}")
+        print(f"think calls:        {r.get('think', 0)}")
+
+    s, stc = a.get("skills"), a.get("server_tool_calls")
+    if s or stc:
+        print("\n=== SKILLS USAGE ===")
+        if s:
+            print(f"list_skills calls:  {s.get('list_skills', 0)}")
+            print(f"load_skill calls:   {s.get('load_skill', 0)}")
+            print(f"skills loaded:      {s.get('loaded') or 'none'}")
+        print(f"server-tool calls:  {stc if stc else 'none'}")
+
+
+def render_multi_agent(agents: list) -> None:
+    """Render usage for a multi-agent run (Episode 6): a block per worker, then
+    an aggregate across all workers."""
+    tot = dict(input=0, output=0, cache_w=0, cache_r=0, compact_in=0, compact_out=0)
+    print("\n=== PER-WORKER METRICS ===")
+    for a in agents:
+        print(f"\n[{a['label']}]")
+        print(f"  iterations:     {a['iterations']}")
+        print(f"  tokens:         in={a['input_tokens']:,}  out={a['output_tokens']:,}")
+        if "cache_write" in a or "cache_read" in a:
+            print(f"  cache:          write={a.get('cache_write', 0):,}  read={a.get('cache_read', 0):,}")
+        if "compactions" in a:
+            print(f"  compactions:    {a['compactions']} "
+                  f"(summarizer in={a.get('compact_in', 0):,} out={a.get('compact_out', 0):,})")
+        r = a.get("reasoning")
+        if r:
+            print(f"  reasoning:      plan_writes={r.get('write_plan', 0)}  think={r.get('think', 0)}")
+        s = a.get("skills")
+        if s:
+            print(f"  skills:         list_calls={s.get('list_skills', 0)}  "
+                  f"load_calls={s.get('load_skill', 0)}  loaded={s.get('loaded') or 'none'}")
+        if "delegate_calls" in a:
+            print(f"  delegate calls: {a['delegate_calls']}")
+        if a.get("server_tool_calls"):
+            print(f"  server tools:   {a['server_tool_calls']}")
+        tot["input"] += a["input_tokens"]
+        tot["output"] += a["output_tokens"]
+        tot["cache_w"] += a.get("cache_write", 0)
+        tot["cache_r"] += a.get("cache_read", 0)
+        tot["compact_in"] += a.get("compact_in", 0)
+        tot["compact_out"] += a.get("compact_out", 0)
+
+    print("\n=== AGGREGATE ACROSS ALL WORKERS ===")
+    print(f"workers spawned:    {len(agents)}")
+    print(f"total input:        {tot['input']:,}")
+    print(f"total output:       {tot['output']:,}")
+    print(f"total cache write:  {tot['cache_w']:,}")
+    print(f"total cache read:   {tot['cache_r']:,}")
+    print(f"summarizer in/out:  {tot['compact_in']:,} / {tot['compact_out']:,}")
+    grand = tot["input"] + tot["output"] + tot["compact_in"] + tot["compact_out"]
+    print(f"grand total tokens: {grand:,}")
+
+
+def print_metrics_summary(metrics_path: Path) -> None:
+    """Render the usage metrics the agent recorded this run. The agent writes
+    raw counters to metrics.json; the harness owns ALL reporting (same split as
+    the tool-call summary). Silently does nothing if there's no file."""
+    if not metrics_path.exists():
+        return
+    with open(metrics_path, encoding="utf-8") as f:
+        data = json.load(f)
+    agents = data.get("agents", [])
+    if not agents:
+        return
+
+    # Echo the task so a run is self-identifying (which input produced this?).
+    # The full system prompt is also recorded in metrics.json but not printed
+    # here — it's long and stable; the task is the short, varying part.
+    inputs = data.get("inputs") or {}
+    if inputs.get("task"):
+        print(f'\ninput task: "{inputs["task"]}"')
+
+    if len(agents) == 1:
+        render_single_agent(agents[0])
+    else:
+        render_multi_agent(agents)
+
+    config = data.get("config")
+    if config:
+        print("\nconfig: " + "  ".join(f"{k}={fmt(v)}" for k, v in config.items()))
+
+
 def print_tool_call_summary(tool_calls_path: Path) -> None:
     """Render a summary of the tool calls the agent recorded this run. This is
     the harness's view of the agent's telemetry — the agent writes the file but
@@ -107,7 +220,7 @@ def main() -> int:
     cwd = Path(args.cwd).resolve()
     command = capture.resolve_command(args.command)
     logs_dir = Path(args.logdir).resolve() if args.logdir else cwd / "logs"
-    collect = args.collect if args.collect is not None else ["tool_calls.jsonl"]
+    collect = args.collect if args.collect is not None else ["tool_calls.jsonl", "metrics.json"]
 
     run_dir = make_run_dir(logs_dir)
     print(f"[run] {' '.join(command)}  ->  {run_dir}\n", flush=True)
@@ -127,8 +240,9 @@ def main() -> int:
             shutil.move(str(produced), str(run_dir / name))
             print(f"[run] collected {name}", flush=True)
 
-    # The harness — not the agent — renders the tool-call summary.
+    # The harness — not the agent — renders the tool-call and usage summaries.
     print_tool_call_summary(run_dir / "tool_calls.jsonl")
+    print_metrics_summary(run_dir / "metrics.json")
 
     print(f"\n[run] done (exit {exit_code}) -> {run_dir}", flush=True)
     return exit_code

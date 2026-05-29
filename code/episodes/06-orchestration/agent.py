@@ -659,6 +659,45 @@ def write_tool_telemetry():
             f.write(json.dumps(call) + "\n")
 
 
+def write_metrics():
+    """Write this run's usage to metrics.json — one entry per worker (the
+    orchestrator plus every delegated worker). Recording only; the harness
+    (run.py) reads this and renders the per-worker + aggregate summary."""
+    agents = []
+    for label, m in GLOBAL_METRICS.items():
+        agents.append({
+            "label": label,
+            "iterations": m.iterations,
+            "input_tokens": m.input_tokens,
+            "output_tokens": m.output_tokens,
+            "cache_write": m.cache_write,
+            "cache_read": m.cache_read,
+            "compactions": m.compactions,
+            "compact_in": m.compact_in,
+            "compact_out": m.compact_out,
+            "reasoning": {"write_plan": m.plan_writes, "think": m.think_calls},
+            "skills": {
+                "list_skills": m.list_skills_calls,
+                "load_skill": m.load_skill_calls,
+                "loaded": m.loaded_skill_names,
+            },
+            "delegate_calls": m.delegate_calls,
+            "server_tool_calls": dict(m.server_tool_calls),
+        })
+    metrics = {
+        "agents": agents,
+        "inputs": {"system": ORCHESTRATOR_SYSTEM, "task": TASK},
+        "config": {
+            "COMPACTION_THRESHOLD": COMPACTION_THRESHOLD,
+            "KEEP_LAST_ITERATIONS": KEEP_LAST_ITERATIONS,
+            "MAX_ITERATIONS": MAX_ITERATIONS,
+            "MAX_WORKER_ITER": MAX_WORKER_ITER,
+        },
+    }
+    with open("metrics.json", "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+
+
 # --- 14. The agent loop, refactored as a recursive function.
 ORCHESTRATOR_SYSTEM = """You are an **orchestrator**.
 
@@ -842,8 +881,6 @@ def run_agent(task: str, agent_type: str) -> str:
             metrics.output_tokens += u.output_tokens
             metrics.cache_write += cw
             metrics.cache_read += cr
-            p(f"  [iter {metrics.iterations}: in={u.input_tokens}, out={u.output_tokens}, "
-              f"cache_w={cw}, cache_r={cr}]")
 
             # Persist the assistant turn (including server_tool_use / web_search_tool_result).
             assistant_blocks = [_block_to_dict(b) for b in resp.content]
@@ -1006,47 +1043,13 @@ except Exception as e:
     print(f"\n!!! TOP-LEVEL EXCEPTION: {type(e).__name__}: {e}")
     final_summary = f"(crashed: {e})"
 
-# --- 17. Final aggregate metrics.
+# --- 17. Final output + metrics. The orchestrator's answer is printed here;
+# the per-worker / aggregate usage summary is recorded for the harness (run.py)
+# to render — same record-in-agent, report-in-run.py split as the other episodes.
 print("\n" + "=" * 70)
 print("=== FINAL ORCHESTRATOR SUMMARY ===")
 print("=" * 70)
 print(final_summary)
 
-print("\n" + "=" * 70)
-print("=== PER-WORKER METRICS ===")
-print("=" * 70)
-total_in = total_out = total_cw = total_cr = total_ci = total_co = 0
-for label, m in GLOBAL_METRICS.items():
-    print(f"\n[{label}]")
-    print(f"  iterations:     {m.iterations}")
-    print(f"  tokens:         in={m.input_tokens:,}  out={m.output_tokens:,}")
-    print(f"  cache:          write={m.cache_write:,}  read={m.cache_read:,}")
-    print(f"  compactions:    {m.compactions} (summarizer in={m.compact_in:,} out={m.compact_out:,})")
-    print(f"  reasoning:      plan_writes={m.plan_writes}  think={m.think_calls}")
-    print(f"  skills:         list_calls={m.list_skills_calls}  load_calls={m.load_skill_calls}  "
-          f"loaded={m.loaded_skill_names or 'none'}")
-    print(f"  delegate calls: {m.delegate_calls}")
-    if m.server_tool_calls:
-        print(f"  server tools:   {dict(m.server_tool_calls)}")
-    total_in += m.input_tokens
-    total_out += m.output_tokens
-    total_cw += m.cache_write
-    total_cr += m.cache_read
-    total_ci += m.compact_in
-    total_co += m.compact_out
-
-print("\n" + "=" * 70)
-print("=== AGGREGATE ACROSS ALL WORKERS ===")
-print("=" * 70)
-print(f"workers spawned:    {len(GLOBAL_METRICS)}")
-print(f"total input:        {total_in:,}")
-print(f"total output:       {total_out:,}")
-print(f"total cache write:  {total_cw:,}")
-print(f"total cache read:   {total_cr:,}")
-print(f"summarizer in/out:  {total_ci:,} / {total_co:,}")
-grand = total_in + total_out + total_ci + total_co
-print(f"grand total tokens: {grand:,}")
-print(f"\nconfig: COMPACTION_THRESHOLD={COMPACTION_THRESHOLD:,}  KEEP_LAST_ITERATIONS={KEEP_LAST_ITERATIONS}  "
-      f"MAX_ITERATIONS={MAX_ITERATIONS}  MAX_WORKER_ITER={MAX_WORKER_ITER}")
-
 write_tool_telemetry()
+write_metrics()

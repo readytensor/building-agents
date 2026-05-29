@@ -2,7 +2,7 @@
 Episode 1 — The Loop
 
 Minimal agent: a while-loop calling a single `bash` tool until the model stops
-requesting tool calls. Naive stop condition. ~80 lines.
+requesting tool calls. Naive stop condition. 
 
 See ../../README.md for context.
 """
@@ -81,7 +81,7 @@ SYSTEM = (
     "guess. When the task is complete, stop calling tools and produce "
     "a clear answer."
 )
-TASK = "Explore the codebase in the current directory and tell me what it does."
+TASK = "Explore the codebase in the current directory and tell me what it does in 100-150 words."
 
 # --- Tool-call telemetry: record every tool the agent invokes, in order, so
 # we can see the path it took and how many calls it made (this varies run to
@@ -96,22 +96,52 @@ def write_tool_telemetry():
         for call in TOOL_CALLS:
             f.write(json.dumps(call) + "\n")
 
+# --- Usage telemetry: record token usage per run, the same way as tool calls.
+# The agent only RECORDS (to metrics.json); the harness (run.py) RENDERS the
+# summary. Keeping reporting out of the agent keeps it minimal.
+def write_metrics():
+    """Write this run's token usage to metrics.json. Recording only — run.py
+    reads this and prints the summary."""
+    metrics = {
+        "agents": [{
+            "label": "agent",
+            "iterations": iteration,
+            "input_tokens": total_in,
+            "output_tokens": total_out,
+            "per_iter": per_iter,  # [input, output] for each LLM call
+        }],
+        "inputs": {"system": SYSTEM, "task": TASK},
+    }
+    with open("metrics.json", "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
+
 messages = [
     {"role": "system", "content": SYSTEM},
     {"role": "user", "content": TASK},
 ]
 print(f"USER: {TASK}\n")
 
+total_in = total_out = 0
+iteration = 0
+per_iter = []
+
 while True:
+    iteration += 1
     resp = client.chat.completions.create(
         model=MODEL, messages=messages, tools=[BASH_TOOL],
     )
+    usage = resp.usage
+    total_in += usage.prompt_tokens
+    total_out += usage.completion_tokens
+    per_iter.append([usage.prompt_tokens, usage.completion_tokens])
+
     msg = resp.choices[0].message
     messages.append(msg.model_dump(exclude_none=True))
 
     if not msg.tool_calls:
         print(f"\n=== FINAL RESPONSE ===\n\n{msg.content or ''}")
         write_tool_telemetry()
+        write_metrics()
         break
 
     for tc in msg.tool_calls:
