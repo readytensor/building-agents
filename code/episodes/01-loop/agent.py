@@ -26,15 +26,31 @@ if SANDBOX.exists():
     shutil.rmtree(SANDBOX)
 shutil.copytree(INITIAL, SANDBOX)
 
-# --- 2. LLM client. The openai package targets any OpenAI-compatible endpoint.
+# --- 2. LLM client. The openai package targets any OpenAI-compatible endpoint;
+# switch providers by changing LLM_BASE_URL / LLM_AGENT_MODEL in .env.
 load_dotenv(Path("../../.env"))
-BASE_URL = os.environ.get("OPENAI_BASE_URL") or ""
-if "anthropic" in BASE_URL:
-    API_KEY = os.environ.get("ANTHROPIC_API_KEY")
-else:
-    API_KEY = os.environ.get("OPENAI_API_KEY")
-MODEL = os.environ.get("OPENAI_MODEL", "gpt-5-mini")
-client = OpenAI(api_key=API_KEY, base_url=BASE_URL or None)
+
+
+def api_key_for(base_url: str):
+    """Return the API key for the provider in `base_url`, read from the
+    environment — so switching providers means changing only LLM_BASE_URL, never
+    moving keys around. Anything OpenAI-compatible (Together, DeepSeek,
+    OpenRouter, …) falls through to OPENAI_API_KEY."""
+    by_provider = {
+        "anthropic": "ANTHROPIC_API_KEY",
+        "groq": "GROQ_API_KEY",
+        "googleapis": "GOOGLE_API_KEY",
+        "manus": "MANUS_API_KEY",
+    }
+    for fragment, key_var in by_provider.items():
+        if fragment in base_url:
+            return os.environ.get(key_var)
+    return os.environ.get("OPENAI_API_KEY")
+
+
+BASE_URL = os.environ.get("LLM_BASE_URL") or ""
+MODEL = os.environ.get("LLM_AGENT_MODEL", "gpt-5-mini")
+client = OpenAI(api_key=api_key_for(BASE_URL), base_url=BASE_URL or None)
 
 # --- 3. The one tool: bash, bounded to the sandbox directory.
 def bash(command: str) -> str:
@@ -111,6 +127,7 @@ def write_metrics():
             "per_iter": per_iter,  # [input, output] for each LLM call
         }],
         "inputs": {"system": SYSTEM, "task": TASK},
+        "config": {"MODEL": MODEL},
     }
     with open("metrics.json", "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2)
@@ -149,10 +166,10 @@ while True:
         TOOL_CALLS.append({"tool": tc.function.name, "args": args})
         print(f"> bash({args['command']!r})")
         result = bash(**args)
-        if len(result) < 400:
+        if len(result) < 2000:
             preview = result
         else:
-            preview = result[:400] + "...[truncated]"
+            preview = result[:2000] + "...[truncated]"
         print(f"  {preview}\n")
         messages.append({
             "role": "tool", "tool_call_id": tc.id, "content": result,

@@ -1,15 +1,15 @@
 """
-Episode 2 — Tools
+Episode 3 — Context (tools)
 
-The agent's action space: six general primitives (bash, list_files, read,
-write, edit, grep) plus a tiny @tool decorator (~25 lines) that builds each
-tool's JSON-schema definition from its Python signature. Every tool resolves
-paths inside SANDBOX. `list_files` is a cross-platform alternative to shell
-find/ls/dir, so navigation doesn't depend on the host shell.
+The agent's action space — unchanged from Ep 2: the same six general primitives
+(bash, list_files, read, write, edit, grep) plus the tiny @tool decorator that
+builds each tool's JSON-schema from its signature. Ep 3 adds nothing to the
+action space; what changes this episode is context management — compaction (see
+compaction.py) — not the tools.
 
-From Ep 2 onward the tools live here, separate from the agent loop. New
-episodes add tools to this file; agent.py imports the registry and rarely
-changes. agent.py owns the sandbox *reset* — this file just names the dir.
+As in Ep 2, the tools live here, separate from the agent loop, and import
+nothing from agent.py (one-way `agent → tools`). Every tool resolves paths
+inside SANDBOX, defined here; agent.py owns the sandbox *reset*.
 
 See ../../README.md for context.
 """
@@ -58,8 +58,10 @@ def tool(description: str):
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            call_args = sig.bind(*args, **kwargs)
-            TOOL_CALLS.append({"tool": func.__name__, "args": dict(call_args.arguments)})
+            # Record the call before running it, so the path stays correct even
+            # if the tool raises (e.g. done() raises TaskComplete).
+            bound = sig.bind(*args, **kwargs)
+            TOOL_CALLS.append({"tool": func.__name__, "args": dict(bound.arguments)})
             return func(*args, **kwargs)
 
         wrapper.tool_definition = {
@@ -79,7 +81,7 @@ def tool(description: str):
     return decorator
 
 
-# --- The tools. All paths resolve inside SANDBOX.
+# --- The working tools. All paths resolve inside SANDBOX.
 def _safe_path(path: str) -> Path:
     """Resolve `path` inside SANDBOX. Raises if it escapes."""
     resolved = (SANDBOX / path).resolve()

@@ -68,8 +68,8 @@ shutil.copytree(INITIAL, SANDBOX)
 # --- 2. LLM client.
 load_dotenv(Path("../../.env"))
 client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6")
-MAX_TOKENS = int(os.environ.get("ANTHROPIC_MAX_TOKENS", 4096))
+MODEL = os.environ.get("LLM_AGENT_MODEL", "claude-sonnet-4-6")
+MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", 4096))
 
 # --- Knobs.
 COMPACTION_THRESHOLD = int(os.environ.get("EP3_THRESHOLD", 30_000))
@@ -104,7 +104,7 @@ def _preview_args(args: dict) -> str:
     return ", ".join(parts)
 
 
-def _truncate(text: str, limit: int = 400) -> str:
+def _truncate(text: str, limit: int = 2000) -> str:
     """Truncate a tool-result string for transcript display."""
     if len(text) < limit:
         return text
@@ -194,8 +194,8 @@ def write(path: str, content: str) -> str:
     return f"Wrote {len(content)} bytes to {path}."
 
 
-@tool("Replace the first occurrence of old_string with new_string in a file. Errors if old_string isn't unique.")
-def edit(path: str, old_string: str, new_string: str) -> str:
+@tool("Replace old_string with new_string in a file. Replaces a single occurrence and errors if old_string isn't unique; pass replace_all=true to replace every occurrence (e.g. renaming a symbol).")
+def edit(path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
     p = _safe_path(path)
     if not p.exists():
         return f"Error: {path} does not exist."
@@ -205,10 +205,10 @@ def edit(path: str, old_string: str, new_string: str) -> str:
     count = text.count(old_string)
     if count == 0:
         return f"Error: old_string not found in {path}."
-    if count > 1:
-        return f"Error: old_string appears {count} times in {path}; provide more context to make it unique."
-    p.write_text(text.replace(old_string, new_string, 1), encoding="utf-8")
-    return f"Replaced 1 occurrence in {path}."
+    if count > 1 and not replace_all:
+        return f"Error: old_string appears {count} times in {path}; pass replace_all=true to replace all, or add more context to make it unique."
+    p.write_text(text.replace(old_string, new_string), encoding="utf-8")
+    return f"Replaced {count} occurrence(s) in {path}."
 
 
 @tool("Search for a regex pattern under a path. Returns matches as relative/path:line: text.")
@@ -688,6 +688,7 @@ def write_metrics():
         "agents": agents,
         "inputs": {"system": ORCHESTRATOR_SYSTEM, "task": TASK},
         "config": {
+            "MODEL": MODEL,
             "COMPACTION_THRESHOLD": COMPACTION_THRESHOLD,
             "KEEP_LAST_ITERATIONS": KEEP_LAST_ITERATIONS,
             "MAX_ITERATIONS": MAX_ITERATIONS,

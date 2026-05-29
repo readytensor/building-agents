@@ -87,7 +87,7 @@ diff -r initial sandbox
 
 ## Provider portability
 
-The code uses the `openai` Python package against the **Chat Completions API**. The same code points at any OpenAI-compatible endpoint by overriding `OPENAI_BASE_URL` in `.env`. Compatible providers include OpenAI, Groq, Together, Mistral, DeepSeek, Ollama, vLLM, and OpenRouter.
+The code uses the `openai` Python package against the **Chat Completions API**. The same code points at any OpenAI-compatible endpoint by setting `LLM_BASE_URL` / `LLM_AGENT_MODEL` in `.env` (the matching API key is selected automatically). Compatible providers include OpenAI, Groq, Together, Mistral, DeepSeek, Ollama, vLLM, and OpenRouter.
 
 ## Toy codebase
 
