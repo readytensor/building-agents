@@ -228,7 +228,7 @@ def grep(pattern: str, path: str = ".") -> str:
             file_lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
             for i, line in enumerate(file_lines, 1):
                 if regex.search(line):
-                    rel = f.relative_to(SANDBOX)
+                    rel = f.relative_to(SANDBOX.resolve())
                     results.append(f"{rel}:{i}: {line[:200]}")
                     if len(results) >= 50:
                         return "\n".join(results) + "\n... (truncated at 50 matches)"
