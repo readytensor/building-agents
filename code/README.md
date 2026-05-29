@@ -49,7 +49,7 @@ Run (records `tool_calls.jsonl` only):
 python run.py --cwd episodes/01-loop                 # Episode 1 — the loop
 python run.py --cwd episodes/02-tools                # Episode 2 — tools + @tool
 python run.py --cwd episodes/03-context              # Episode 3 — compaction + done
-python run.py --cwd episodes/04-planning-reasoning   # Episode 4 — planning + think
+python run.py --cwd episodes/04-planning-thinking   # Episode 4 — planning + think
 python run.py --cwd episodes/05-skills               # Episode 5 — skills
 python run.py --cwd episodes/06-orchestration        # Episode 6 — orchestration
 ```
@@ -60,7 +60,7 @@ Run **and capture the terminal** (also writes `terminal.log` + `terminal.jsonl`)
 python run.py --capture --cwd episodes/01-loop                 # Episode 1 — the loop
 python run.py --capture --cwd episodes/02-tools                # Episode 2 — tools + @tool
 python run.py --capture --cwd episodes/03-context              # Episode 3 — compaction + done
-python run.py --capture --cwd episodes/04-planning-reasoning   # Episode 4 — planning + think
+python run.py --capture --cwd episodes/04-planning-thinking   # Episode 4 — planning + think
 python run.py --capture --cwd episodes/05-skills               # Episode 5 — skills
 python run.py --capture --cwd episodes/06-orchestration        # Episode 6 — orchestration
 ```
@@ -82,7 +82,7 @@ diff -r initial sandbox
 - **01-loop** — the minimal agent loop with one `bash` tool
 - **02-tools** — multiple primitives + `@tool` helper + skills
 - **03-context** — rolling-summary compaction + done tool
-- **04-planning-reasoning** — `write_plan` (structured plan in agent state) + `think` (in-the-moment reasoning scratchpad)
+- **04-planning-thinking** — `write_plan` (structured plan in agent state) + `think` (in-the-moment thinking scratchpad)
 - **05-orchestration** — multi-agent + `delegate`
 
 ## Provider portability

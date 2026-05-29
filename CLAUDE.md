@@ -29,7 +29,7 @@ These have been settled across planning conversations. Build on them; don't re-d
   - Ep 1 — `while`-loop + one tool (`bash`) + naive stop condition. ~60–80 lines.
   - Ep 2 — add a few general primitives (`read`, `write`, `grep`), a tiny `@tool`/schema helper.
   - Ep 3 — **rolling-summary compaction** + **done tool (`TaskComplete`)** — paired around the theme of *making long-running tasks reliable*.
-  - Ep 4 — plan step (TODO-style tool: `write_plan`) + in-the-moment reasoning step (`think`, no-op echo) + **dynamic system-prompt mechanism** (`_system_with_plan` — load-bearing for Ep 5). Reflection was tried and dropped.
+  - Ep 4 — plan step (TODO-style tool: `write_plan`) + in-the-moment think step (`think`, no-op echo) + **dynamic system-prompt mechanism** (`system_with_plan` — load-bearing for Ep 5). Reflection was tried and dropped. (Episode titled *Planning & Thinking*; folder `code/episodes/04-planning-thinking/`.)
   - **Ep 5 — skills system** (`list_skills` + `load_skill` + `.skills/<name>/SKILL.md` file format + dynamic skill-body injection in system prompt + `_SKILL_TOOLS_REGISTRY` for tools that only register on skill load). ~70 LOC delta on Ep 4. *Originally planned as multi-agent; repivoted during scoping.*
   - **Ep 6 — orchestration** (multi-agent + `delegate` + worker runtime; skills serve as worker configurations). Not yet spec'd.
 - **LLM SDK: `openai` Python package against the Chat Completions API** (not the Responses API). Provider-portable via `base_url` override. No provider-specific features used. **Dev-time exception (Eps 4–5):** native Anthropic SDK + prompt caching used during development for cost/speed; must be translated back to openai before publishing companion code.
