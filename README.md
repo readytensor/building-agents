@@ -24,7 +24,8 @@ The worked example is a **coding agent**. It's the cleanest domain to teach in: 
 | 2   | **Tools**                 | How does it actually do things?             | An agent with real capabilities; intuition for tool design            |
 | 3   | **Context**               | Why does it get worse on longer tasks?      | The most important practical insight in the series                    |
 | 4   | **Planning & Thinking**  | What does it cost to make the agent legible? | Two new tools (write_plan + think) — and an honest cost result that recasts what planning is for |
-| 5   | **Orchestration**         | When is one agent the wrong shape?          | A clear framework for when multi-agent adds value vs. overhead        |
+| 5   | **Skills**                | How does it reach beyond its fixed toolkit without paying up-front? | A lazy-loaded capability library — the on-demand pattern Claude Code ships |
+| 6   | **Orchestration**         | When is one agent the wrong shape?          | A clear framework for when multi-agent adds value vs. overhead        |
 
 Each episode follows the same internal rhythm: **one question, one limitation, one addition (in code), one before/after, one abstraction** — closing with "this is the same pattern real systems use, just with more machinery."
 
@@ -238,7 +239,8 @@ agents-from-first-principles/        # public companion repo
     ├── 02-tools/
     ├── 03-context/
     ├── 04-planning-thinking/
-    └── 05-orchestration/
+    ├── 05-skills/
+    └── 06-orchestration/
 ```
 
 **Each episode is self-contained.** Viewer can `cd episodes/03-context && python agent.py` and see exactly that episode's agent. No git checkout dance, no branch switching.
@@ -304,7 +306,8 @@ building-agents/
 │       ├── 02-tools/{agent.py, README.md, initial/}
 │       ├── 03-context/{agent.py, README.md, initial/}
 │       ├── 04-planning-thinking/{agent.py, README.md, initial/}
-│       └── 05-orchestration/{agent.py, README.md, initial/}
+│       ├── 05-skills/{agent.py, README.md, initial/}
+│       └── 06-orchestration/{agent.py, README.md, initial/}
 └── tmp/                                   # reference material — NOT the deliverable
     ├── about-clyep/                       # Clyep brand, ICP, production strengths
     │   ├── 1-What-is-Clyep.txt
