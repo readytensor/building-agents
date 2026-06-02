@@ -27,7 +27,7 @@ Each episode follows the same rhythm: one question, one limitation, one addition
 
 ```bash
 git clone https://github.com/readytensor/building-agents
-cd building-agents
+cd building-agents/code
 ```
 
 Install with `uv` (recommended):
@@ -56,16 +56,21 @@ python agent.py
 ## How the code is organized
 
 ```
-episodes/
-├── 01-loop/
-│   ├── agent.py      # the episode's agent — start here
-│   ├── initial/      # pristine starting copy of the example project
-│   └── sandbox/      # where the agent works (recreated every run)
-├── 02-tools/
-├── 03-context/
-├── 04-planning-thinking/
-├── 05-skills/
-└── 06-orchestration/
+code/
+├── episodes/
+│   ├── 01-loop/
+│   │   ├── agent.py      # the episode's agent — start here
+│   │   ├── initial/      # pristine starting copy of the example project
+│   │   └── sandbox/      # where the agent works (recreated every run)
+│   ├── 02-tools/
+│   ├── 03-context/
+│   ├── 04-planning-thinking/
+│   ├── 05-skills/
+│   └── 06-orchestration/
+├── run.py               # optional harness to record a run (see below)
+├── capture.py           # terminal recorder used by run.py --capture
+├── pyproject.toml
+└── .env.example
 ```
 
 Each episode is **self-contained** — `cd` into it and run `python agent.py`. No branch switching.
@@ -81,6 +86,17 @@ diff -r initial sandbox
 ```bash
 diff episodes/01-loop/agent.py episodes/02-tools/agent.py
 ```
+
+## Recording a run (optional)
+
+`python agent.py` runs the agent on its own. If you want to capture what happened — to compare runs or inspect the agent's path — use the `run.py` harness instead (from the `code/` directory):
+
+```bash
+python run.py --cwd episodes/01-loop            # record the tool-call sequence to logs/<timestamp>/
+python run.py --cwd episodes/01-loop --capture  # also save the full terminal output
+```
+
+Each run gets its own timestamped folder under the episode's `logs/`, so you can run the same task repeatedly and compare how the agent's path and tool-call count vary from run to run. `capture.py` is the underlying terminal recorder and also works standalone on any command (e.g. `python capture.py -- pytest -q`).
 
 ## The example project: `md2html`
 
