@@ -8,6 +8,9 @@ README-INTERNAL.md
 .claude/
 CLAUDE.md
 
+# Internal build/design specs — kept locally for our use, not shipped to students.
+spec/
+
 # Alternative sandbox directories (scratch/experiment scripts use these)
 code/episodes/*/_sandbox*/
 
