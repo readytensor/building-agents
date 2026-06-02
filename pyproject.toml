@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agents-from-first-principles"
 version = "0.1.0"
-description = "Companion code for the 5-episode 'Agents from First Principles' video series produced by Clyep"
+description = "Companion code for the 6-part 'Agents from First Principles' video series produced by Clyep"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

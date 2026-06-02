@@ -27,7 +27,7 @@ Each episode follows the same rhythm: one question, one limitation, one addition
 
 ```bash
 git clone https://github.com/readytensor/building-agents
-cd building-agents/code
+cd building-agents
 ```
 
 Install with `uv` (recommended):
@@ -56,7 +56,7 @@ python agent.py
 ## How the code is organized
 
 ```
-code/
+building-agents/
 ├── episodes/
 │   ├── 01-loop/
 │   │   ├── agent.py      # the episode's agent — start here
@@ -89,7 +89,7 @@ diff episodes/01-loop/agent.py episodes/02-tools/agent.py
 
 ## Recording a run (optional)
 
-`python agent.py` runs the agent on its own. If you want to capture what happened — to compare runs or inspect the agent's path — use the `run.py` harness instead (from the `code/` directory):
+`python agent.py` runs the agent on its own. If you want to capture what happened — to compare runs or inspect the agent's path — use the `run.py` harness instead (from the repo root):
 
 ```bash
 python run.py --cwd episodes/01-loop            # record the tool-call sequence to logs/<timestamp>/
