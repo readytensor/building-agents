@@ -1,15 +1,15 @@
 tmp/
 
 # Internal spec / planning version of the README — not for the public repo.
-# The public-facing README.md is committed; this detailed one is for our use only.
+# The public-facing README.md is committed; this detailed one is for initial use 
+# during series planning only.
 README-INTERNAL.md
 
 # Internal Claude Code config + operational guidance — kept locally, not shipped.
 .claude/
 CLAUDE.md
 
-# Internal build/design specs — kept locally for our use, not shipped to students.
-spec/
+# (Internal build/design specs now live under tmp/spec/ — covered by the tmp/ rule above.)
 
 # Alternative sandbox directories (scratch/experiment scripts use these)
 episodes/*/_sandbox*/
@@ -52,8 +52,6 @@ episodes/*/sandbox/
 episodes/*/logs/
 episodes/*/tool_calls.jsonl
 logs/
-# Internal team notes — never shared with students
-_internal/
 # IDE / editor
 .vscode/
 .idea/
