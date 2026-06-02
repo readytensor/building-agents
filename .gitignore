@@ -1,5 +1,13 @@
 tmp/
 
+# Internal spec / planning version of the README — not for the public repo.
+# The public-facing README.md is committed; this detailed one is for our use only.
+README-INTERNAL.md
+
+# Internal Claude Code config + operational guidance — kept locally, not shipped.
+.claude/
+CLAUDE.md
+
 # Alternative sandbox directories (scratch/experiment scripts use these)
 code/episodes/*/_sandbox*/
 
