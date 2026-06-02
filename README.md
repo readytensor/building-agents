@@ -1,4 +1,4 @@
-# Agents from First Principles
+# Building Agents from First Principles
 
 Build a working coding agent from scratch — from a plain `while` loop with a single tool, all the way to multi-agent orchestration. No frameworks: just Python and a model API.
 
@@ -12,14 +12,14 @@ The worked example is a **coding agent** — the cleanest domain to learn in: a 
 
 ## The series
 
-| #   | Episode               | The question                                | What you build                                                              |
-| --- | --------------------- | ------------------------------------------- | -------------------------------------------------------------------------- |
-| 1   | The Loop              | What is an agent?                           | A minimal agent: a `while` loop + one `bash` tool                          |
-| 2   | Tools                 | How does it actually do things?             | General primitives (`read` / `write` / `edit` / `grep`) + a tiny `@tool` helper |
-| 3   | Context               | Why does it get worse on long tasks?        | Rolling-summary compaction to keep long runs affordable                    |
-| 4   | Planning & Thinking   | What does it cost to make the agent legible? | `write_plan` + `think`, plus a dynamic system prompt                        |
-| 5   | Skills                | How does it reach beyond its fixed toolkit? | A lazy-loaded skills system (`list_skills` / `load_skill` + `SKILL.md`)     |
-| 6   | Orchestration         | When is one agent the wrong shape?          | `delegate` + worker configs + parallel multi-agent dispatch                 |
+| #   | Episode             | The question                                 | What you build                                                                  |
+| --- | ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
+| 1   | The Loop            | What is an agent?                            | A minimal agent: a `while` loop + one `bash` tool                               |
+| 2   | Tools               | How does it actually do things?              | General primitives (`read` / `write` / `edit` / `grep`) + a tiny `@tool` helper |
+| 3   | Context             | Why does it get worse on long tasks?         | Rolling-summary compaction to keep long runs affordable                         |
+| 4   | Planning & Thinking | What does it cost to make the agent legible? | `write_plan` + `think`, plus a dynamic system prompt                            |
+| 5   | Skills              | How does it reach beyond its fixed toolkit?  | A lazy-loaded skills system (`list_skills` / `load_skill` + `SKILL.md`)         |
+| 6   | Orchestration       | When is one agent the wrong shape?           | `delegate` + worker configs + parallel multi-agent dispatch                     |
 
 Each episode follows the same rhythm: one question, one limitation, one addition in code, one before/after.
 
@@ -30,21 +30,16 @@ git clone https://github.com/readytensor/building-agents
 cd building-agents
 ```
 
-Install with `uv` (recommended):
+Set up a virtual environment and install the dependencies (Python 3.11+):
 
 ```bash
-uv sync
-cp .env.example .env          # add your OPENAI_API_KEY
+python -m venv venv
+source venv/bin/activate       # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env           # add your OPENAI_API_KEY
 ```
 
-…or with plain `pip`:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate     # Windows: .venv\Scripts\activate
-pip install -e .
-cp .env.example .env          # add your OPENAI_API_KEY
-```
+Using `uv`? `uv venv && uv pip install -r requirements.txt`.
 
 Run an episode:
 
@@ -69,7 +64,7 @@ building-agents/
 │   └── 06-orchestration/
 ├── run.py               # optional harness to record a run (see below)
 ├── capture.py           # terminal recorder used by run.py --capture
-├── pyproject.toml
+├── requirements.txt
 └── .env.example
 ```
 
