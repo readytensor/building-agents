@@ -27,3 +27,30 @@ code/episodes/**/_*.py
 # Canonical run logs live under tmp/runs/<epXX>/ (which is already gitignored
 # via the top-level tmp/ rule).
 code/episodes/**/run*.log
+
+# --- Companion code artifacts (migrated from the former code/.gitignore;
+# consolidated here now that the whole repo ships as one unit) ---
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+# Virtualenvs
+.venv/
+venv/
+env/
+# Environment files — .env.example IS committed; only real .env files are ignored
+.env
+.env.local
+# Agent working dirs + per-run artifacts (recreated by agent.py / capture.py each run)
+code/episodes/*/sandbox/
+code/episodes/*/logs/
+code/episodes/*/tool_calls.jsonl
+logs/
+# Internal team notes — never shared with students
+_internal/
+# IDE / editor
+.vscode/
+.idea/
+*.swp
