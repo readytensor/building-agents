@@ -97,7 +97,21 @@ SYSTEM = (
     "guess. When the task is complete, stop calling tools and produce "
     "a clear answer."
 )
-TASK = "Explore the codebase in the current directory and tell me what it does in 100-150 words."
+# Two tasks for the same agent. The agent is identical; only this string changes.
+# The first asks it to summarize the project; the second asks it to write a README.
+# To try the second, comment out the first TASK and uncomment the second.
+TASK = (  # summarize the project
+    "This project has no README. Explore the codebase in the current directory "
+    "and tell me what it does: its purpose, how to use it, and how it's "
+    "structured, in 100-150 words. Base it on what you actually find in the "
+    "code; don't guess."
+)
+# TASK = (  # write the README
+#     "This project has no README. Explore the codebase in the current directory "
+#     "and write a README.md for it. Cover: what the project does, how to install "
+#     "and use it (including the CLI), its architecture, and how to run the tests. "
+#     "Base everything on what you actually find in the code; don't guess."
+# )
 
 # --- Tool-call telemetry: record every tool the agent invokes, in order, so
 # we can see the path it took and how many calls it made (this varies run to

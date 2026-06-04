@@ -10,9 +10,9 @@ It implements a deliberately small but real subset of Markdown: ATX headings, pa
 
 Three optional extensions ship in-tree:
 
-- **tables** — GitHub-flavored pipe tables with column alignment.
-- **code_blocks** — adds the `language-xxx` class on fenced code blocks.
-- **footnotes** — `[^1]` references plus collected definitions at the document end.
+- **tables**: GitHub-flavored pipe tables with column alignment.
+- **code_blocks**: adds the `language-xxx` class on fenced code blocks.
+- **footnotes**: `[^1]` references plus collected definitions at the document end.
 
 ## Install
 
