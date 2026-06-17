@@ -272,7 +272,7 @@ class Parser:
                 i += consumed
                 continue
 
-            if ch == "\\" and i + 1 < n and text[i + 1] in "\\*_{}[]()#+-.!|>":
+            if ch == "\\" and i + 1 < n and text[i + 1] in "\\`*_{}[]()#+-.!|>":
                 # Backslash escape.
                 buf.append(text[i + 1])
                 i += 2

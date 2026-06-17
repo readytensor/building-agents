@@ -87,14 +87,15 @@ SYSTEM = (
     "guess. When the task is complete, stop calling tools and produce "
     "a clear answer."
 )
-TASK = """I'm seeing this when I run pytest in this repo:
-
-FAILED tests/test_renderer.py::test_fixture_pair[escaped_backticks]
-AssertionError: rendered HTML doesn't match expected.
-See tests/fixtures/escaped_backticks.md / escaped_backticks.html
-for the input and what the output should be.
-
-Can you figure out what's wrong and fix it?"""
+# The task: write a README. This continues Ep 1's second task -- only now the
+# agent has real file tools, so the file lands in a single write() call instead
+# of the many shell-escaping workarounds the bash-only agent needed in Ep 1.
+TASK = (
+    "This project has no README. Explore the codebase in the current directory "
+    "and write a README.md for it. Cover: what the project does, how to install "
+    "and use it (including the CLI), its architecture, and how to run the tests. "
+    "Base everything on what you actually find in the code; don't guess."
+)
 
 messages = [
     {"role": "system", "content": SYSTEM},
