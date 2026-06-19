@@ -647,7 +647,7 @@ _METRICS_LOCK = threading.Lock()
 # tagged with which agent made it (orchestrator vs each worker), so we can see
 # the path the whole system took and how many calls each agent made. This
 # varies run to run. Summarized and written to tool_calls.jsonl at the end.
-TOOL_CALLS = []  # list of {"agent": label, "tool": name, "args": {...}}
+TOOL_CALLS = []  # list of {"round": n, "agent": label, "tool": name, "args": {...}}
 
 
 def write_tool_telemetry():
@@ -914,7 +914,7 @@ def run_agent(task: str, agent_type: str) -> str:
                 try:
                     fn = tools_by_name[tu.name]
                     args = tu.input or {}
-                    TOOL_CALLS.append({"agent": label, "tool": tu.name, "args": args})
+                    TOOL_CALLS.append({"round": metrics.iterations, "agent": label, "tool": tu.name, "args": args})
                     arg_preview = _preview_args(args)
                     p(f"> {tu.name}({arg_preview})")
                     result = fn(**args)
@@ -944,7 +944,7 @@ def run_agent(task: str, agent_type: str) -> str:
                     # Single delegate — call inline (no thread pool overhead).
                     tu = delegate_uses[0]
                     args = tu.input or {}
-                    TOOL_CALLS.append({"agent": label, "tool": "delegate", "args": args})
+                    TOOL_CALLS.append({"round": metrics.iterations, "agent": label, "tool": "delegate", "args": args})
                     p(f"> delegate(agent_type={args.get('agent_type')!r}, "
                       f"task=<{len(str(args.get('task','')))}chars>)")
                     result = delegate(**args)
@@ -962,7 +962,7 @@ def run_agent(task: str, agent_type: str) -> str:
                         futures = {}
                         for tu in delegate_uses:
                             args = tu.input or {}
-                            TOOL_CALLS.append({"agent": label, "tool": "delegate", "args": args})
+                            TOOL_CALLS.append({"round": metrics.iterations, "agent": label, "tool": "delegate", "args": args})
                             p(f">    [submit] delegate(agent_type={args.get('agent_type')!r}, "
                               f"task=<{len(str(args.get('task','')))}chars>)")
                             fut = pool.submit(delegate, **args)

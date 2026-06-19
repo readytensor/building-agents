@@ -35,6 +35,7 @@ from openai import OpenAI
 # values have to be present first.
 load_dotenv(Path("../../.env"))
 
+import tools  # noqa: E402  module ref so the loop can set tools.CURRENT_ROUND each turn
 from tools import SANDBOX, TOOLS as BASE_TOOLS, write_tool_telemetry  # noqa: E402
 from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact  # noqa: E402
 from planning import write_plan, think, system_with_plan  # noqa: E402
@@ -168,6 +169,7 @@ per_iter = []
 
 while iteration < MAX_ITERATIONS:
     iteration += 1
+    tools.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
 
     # Dynamic system prompt: rebuild messages[0] from the stable base plus the
     # current plan. The plan lives in agent state (planning.CURRENT_PLAN), so

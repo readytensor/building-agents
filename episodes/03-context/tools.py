@@ -29,7 +29,9 @@ SANDBOX = Path("sandbox")
 # can see the path it took and how many calls it made (this varies run to run).
 # Recorded in the @tool wrapper below and written to tool_calls.jsonl at the end
 # of the run; the harness (run.py) renders the summary.
-TOOL_CALLS = []  # list of {"tool": name, "args": {...}} in call order
+TOOL_CALLS = []  # list of {"round": n, "tool": name, "args": {...}} in call order
+CURRENT_ROUND = 0  # the agent-loop iteration; agent.py sets it each turn so every
+# recorded tool call is tagged with the round (model call) it happened in
 
 
 def write_tool_telemetry():
@@ -61,7 +63,7 @@ def tool(description: str):
             # Record the call before running it, so the path stays correct even
             # if the tool raises (e.g. done() raises TaskComplete).
             bound = sig.bind(*args, **kwargs)
-            TOOL_CALLS.append({"tool": func.__name__, "args": dict(bound.arguments)})
+            TOOL_CALLS.append({"round": CURRENT_ROUND, "tool": func.__name__, "args": dict(bound.arguments)})
             return func(*args, **kwargs)
 
         wrapper.tool_definition = {

@@ -86,7 +86,9 @@ WEB_SEARCH_MAX_USES = int(os.environ.get("EP5_WEB_SEARCH_MAX", 10))
 # --- Tool-call telemetry: record every tool the agent invokes, in order, so
 # we can see the path it took and how many calls it made (this varies run to
 # run). Summarized and written to tool_calls.jsonl at the end of the run.
-TOOL_CALLS = []  # list of {"tool": name, "args": {...}} in call order
+TOOL_CALLS = []  # list of {"round": n, "tool": name, "args": {...}} in call order
+CURRENT_ROUND = 0  # the agent-loop iteration; the loop sets it each turn so every
+# recorded tool call is tagged with the round (model call) it happened in
 
 
 # --- 3. The @tool decorator (Anthropic shape).
@@ -109,7 +111,7 @@ def tool(description: str):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             bound = sig.bind(*args, **kwargs)
-            TOOL_CALLS.append({"tool": func.__name__, "args": dict(bound.arguments)})
+            TOOL_CALLS.append({"round": CURRENT_ROUND, "tool": func.__name__, "args": dict(bound.arguments)})
             return func(*args, **kwargs)
 
         wrapper.tool_definition = {
@@ -749,6 +751,7 @@ per_iter = []
 try:
     while iteration < MAX_ITERATIONS:
         iteration += 1
+        CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
 
         resp = client.messages.create(
             model=MODEL,

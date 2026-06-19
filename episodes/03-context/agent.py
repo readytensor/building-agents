@@ -33,6 +33,7 @@ from openai import OpenAI
 # so the .env values have to be present first.
 load_dotenv(Path("../../.env"))
 
+import tools  # noqa: E402  module ref so the loop can set tools.CURRENT_ROUND each turn
 from tools import SANDBOX, TOOL_DEFS, TOOLS_BY_NAME, write_tool_telemetry  # noqa: E402
 from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact  # noqa: E402
 
@@ -140,6 +141,7 @@ per_iter = []
 
 while iteration < MAX_ITERATIONS:
     iteration += 1
+    tools.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
     resp = client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOL_DEFS,
     )

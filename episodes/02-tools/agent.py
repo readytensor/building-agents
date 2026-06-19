@@ -19,6 +19,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 from openai import OpenAI
 
+import tools  # module ref so the loop can set tools.CURRENT_ROUND each turn
 from tools import SANDBOX, TOOL_DEFS, TOOLS_BY_NAME, write_tool_telemetry
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -109,6 +110,7 @@ per_iter = []
 
 while True:
     iteration += 1
+    tools.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
     resp = client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOL_DEFS,
     )

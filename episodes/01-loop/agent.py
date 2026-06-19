@@ -177,7 +177,7 @@ while True:
 
     for tc in msg.tool_calls:
         args = json.loads(tc.function.arguments)
-        TOOL_CALLS.append({"tool": tc.function.name, "args": args})
+        TOOL_CALLS.append({"round": iteration, "tool": tc.function.name, "args": args})
         print(f"> bash({args['command']!r})")
         result = bash(**args)
         if len(result) < 2000:
