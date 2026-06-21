@@ -125,7 +125,7 @@ SYSTEM = (
 TASK = """I'm about to start adding inline tokens to the parser, and the
 generic name `Node` for our AST type is going to get confusing. Can you
 rename `Node` to `ASTNode` throughout the codebase? The change is purely
-naming — semantics stay identical. All 43 tests should pass after."""
+naming — semantics stay identical. All tests should pass after."""
 
 messages = [
     {"role": "system", "content": SYSTEM},

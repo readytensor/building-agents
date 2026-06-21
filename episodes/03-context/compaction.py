@@ -21,7 +21,7 @@ import os
 
 # --- Compaction knobs. Env-overridable; defaults shown below. The threshold is
 # read by the agent loop (to decide when to fire); KEEP is used here.
-COMPACTION_THRESHOLD = int(os.environ.get("EP3_THRESHOLD", 30_000))  # input tokens per single LLM call.
+COMPACTION_THRESHOLD = int(os.environ.get("EP3_THRESHOLD", 20_000))  # input tokens per single LLM call.
 KEEP_LAST_ITERATIONS = int(os.environ.get("EP3_KEEP", 4))            # recent assistant rounds preserved uncompacted.
 
 SUMMARIZER_PROMPT = (
