@@ -4,7 +4,7 @@
 
 openai>=1.50.0
 python-dotenv>=1.0.0
-tiktoken>=0.7.0          # Ep 3 onward — token counting for compaction
+tiktoken>=0.7.0          # token counting: tool-result tokens (Ep 1+) and compaction trigger (Ep 3+)
 pytest>=8.0.0            # the md2html test suite the agent invokes via bash
 ruff>=0.6.0              # the `lint` tool in Ep 5+'s verification skill
 pytest-cov>=5.0.0        # the `coverage` tool in Ep 5+'s verification skill

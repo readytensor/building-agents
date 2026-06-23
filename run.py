@@ -82,7 +82,19 @@ def render_single_agent(a: dict) -> None:
 
     per_iter = a.get("per_iter")
     if per_iter:
-        print("per-iteration in/out: " + " → ".join(f"{p[0]}/{p[1]}" for p in per_iter))
+        def _fmt(p):
+            if isinstance(p, dict):  # dict format (Ep 3+); tolerate old in/out names too
+                mi = p.get("model_in", p.get("in"))
+                mo = p.get("model_out", p.get("out"))
+                to = p.get("tools_out", p.get("tool_out"))
+                t = f"/{to}" if to is not None else ""
+                return f"{mi}/{mo}{t}" + (" [C]" if p.get("compacted") else "")
+            return f"{p[0]}/{p[1]}"  # legacy [in, out] format
+        print("per-iteration model_in/model_out/tools_out ([C]=compaction fired): " + " → ".join(_fmt(p) for p in per_iter))
+        if any(isinstance(p, dict) and "middle" in p for p in per_iter):
+            print("compactable-middle tokens (the sawtooth, vs threshold): " +
+                  " → ".join(f"{p['middle']}" + ("[C]" if p.get("compacted") else "")
+                             for p in per_iter if isinstance(p, dict)))
 
     r = a.get("reasoning")
     if r:

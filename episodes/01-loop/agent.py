@@ -15,6 +15,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from openai import OpenAI
+from tiktoken import get_encoding
 
 # Windows: make sure stdout can render UTF-8 (LLM outputs often contain → ✓ etc.)
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -126,6 +127,19 @@ def write_tool_telemetry():
         for call in TOOL_CALLS:
             f.write(json.dumps(call) + "\n")
 
+# tiktoken encoder for the per-round tool-result token count (tools_out). Most of
+# the context growth is tool results (a file read dwarfs the model's request), so
+# we measure their real token size. cl100k_base is OpenAI's tokenizer; on Claude
+# it's a close approximation — fine for a telemetry count.
+_ENC = get_encoding("cl100k_base")
+
+
+def _count_tokens(messages):
+    """Real token count (tiktoken) of these messages' content — used to record
+    each round's tool-result total (tools_out)."""
+    return len(_ENC.encode("\n".join(str(m.get("content") or "") for m in messages)))
+
+
 # --- Usage telemetry: record token usage per run, the same way as tool calls.
 # The agent only RECORDS (to metrics.json); the harness (run.py) RENDERS the
 # summary. Keeping reporting out of the agent keeps it minimal.
@@ -138,7 +152,7 @@ def write_metrics():
             "iterations": iteration,
             "input_tokens": total_in,
             "output_tokens": total_out,
-            "per_iter": per_iter,  # [input, output] for each LLM call
+            "per_iter": per_iter,  # {model_in, model_out, tools, tools_out} per round
         }],
         "inputs": {"system": SYSTEM, "task": TASK},
         "config": {"MODEL": MODEL},
@@ -164,9 +178,10 @@ while True:
     usage = resp.usage
     total_in += usage.prompt_tokens
     total_out += usage.completion_tokens
-    per_iter.append([usage.prompt_tokens, usage.completion_tokens])
+    per_iter.append({"model_in": usage.prompt_tokens, "model_out": usage.completion_tokens, "tools": 0, "tools_out": 0})
 
     msg = resp.choices[0].message
+    per_iter[-1]["tools"] = len(msg.tool_calls or [])   # tool calls requested this round
     messages.append(msg.model_dump(exclude_none=True))
 
     if not msg.tool_calls:
@@ -175,6 +190,7 @@ while True:
         write_metrics()
         break
 
+    round_tool_msgs = []
     for tc in msg.tool_calls:
         args = json.loads(tc.function.arguments)
         TOOL_CALLS.append({"round": iteration, "tool": tc.function.name, "args": args})
@@ -185,6 +201,10 @@ while True:
         else:
             preview = result[:2000] + "...[truncated]"
         print(f"  {preview}\n")
-        messages.append({
-            "role": "tool", "tool_call_id": tc.id, "content": result,
-        })
+        tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
+        round_tool_msgs.append(tool_msg)
+        messages.append(tool_msg)
+
+    # Tool results are most of the context growth (a file read dwarfs the model's
+    # request); record this round's tool-result tokens so the per-iter numbers add up.
+    per_iter[-1]["tools_out"] = _count_tokens(round_tool_msgs)

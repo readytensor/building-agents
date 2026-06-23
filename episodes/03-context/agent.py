@@ -35,7 +35,12 @@ load_dotenv(Path("../../.env"))
 
 import tools  # noqa: E402  module ref so the loop can set tools.CURRENT_ROUND each turn
 from tools import SANDBOX, TOOL_DEFS, TOOLS_BY_NAME, write_tool_telemetry  # noqa: E402
-from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact  # noqa: E402
+from compaction import (
+    COMPACTION_THRESHOLD,
+    KEEP_LAST_ITERATIONS,
+    compact,
+    _count_tokens,
+)  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -45,6 +50,7 @@ INITIAL = Path("initial")
 if SANDBOX.exists():
     shutil.rmtree(SANDBOX)
 shutil.copytree(INITIAL, SANDBOX)
+
 
 # --- 2. LLM client. The openai package targets any OpenAI-compatible endpoint;
 # switch providers by changing LLM_BASE_URL / LLM_AGENT_MODEL in .env.
@@ -75,8 +81,11 @@ client = OpenAI(api_key=api_key_for(BASE_URL), base_url=BASE_URL or None)
 SUMMARIZER_BASE_URL = os.environ.get("LLM_SUMMARIZER_BASE_URL") or BASE_URL
 SUMMARIZER_MODEL = os.environ.get("LLM_SUMMARIZER_MODEL") or MODEL
 summarizer_client = (
-    client if SUMMARIZER_BASE_URL == BASE_URL
-    else OpenAI(api_key=api_key_for(SUMMARIZER_BASE_URL), base_url=SUMMARIZER_BASE_URL or None)
+    client
+    if SUMMARIZER_BASE_URL == BASE_URL
+    else OpenAI(
+        api_key=api_key_for(SUMMARIZER_BASE_URL), base_url=SUMMARIZER_BASE_URL or None
+    )
 )
 
 # --- Loop safety cap to prevent an infinite loop. (Compaction knobs live in
@@ -91,16 +100,18 @@ def write_metrics():
     harness (run.py) reads this and renders the summary. Compaction tokens are
     recorded separately so the harness can show the agent-vs-compaction split."""
     metrics = {
-        "agents": [{
-            "label": "agent",
-            "iterations": iteration,
-            "input_tokens": total_in,
-            "output_tokens": total_out,
-            "compactions": compactions_fired,
-            "compact_in": compact_in,
-            "compact_out": compact_out,
-            "per_iter": per_iter,  # [input, output] for each LLM call
-        }],
+        "agents": [
+            {
+                "label": "agent",
+                "iterations": iteration,
+                "input_tokens": total_in,
+                "output_tokens": total_out,
+                "compactions": compactions_fired,
+                "compact_in": compact_in,
+                "compact_out": compact_out,
+                "per_iter": per_iter,  # {model_in, model_out, tools, tools_out, middle, compacted} per round
+            }
+        ],
         "inputs": {"system": SYSTEM, "task": TASK},
         "config": {
             "MODEL": MODEL,
@@ -141,16 +152,28 @@ per_iter = []
 
 while iteration < MAX_ITERATIONS:
     iteration += 1
-    tools.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
+    tools.CURRENT_ROUND = iteration  # tag tool calls with the round they happen in
     resp = client.chat.completions.create(
-        model=MODEL, messages=messages, tools=TOOL_DEFS,
+        model=MODEL,
+        messages=messages,
+        tools=TOOL_DEFS,
     )
     u = resp.usage
     total_in += u.prompt_tokens
     total_out += u.completion_tokens
-    per_iter.append([u.prompt_tokens, u.completion_tokens])
+    per_iter.append(
+        {
+            "model_in": u.prompt_tokens,
+            "model_out": u.completion_tokens,
+            "tools": 0,
+            "tools_out": 0,
+            "middle": 0,
+            "compacted": False,
+        }
+    )
 
     msg = resp.choices[0].message
+    per_iter[-1]["tools"] = len(msg.tool_calls or [])  # tool calls requested this round
     messages.append(msg.model_dump(exclude_none=True))
 
     if not msg.tool_calls:
@@ -158,6 +181,7 @@ while iteration < MAX_ITERATIONS:
         print(f"\n=== FINAL RESPONSE ===\n\n{msg.content or ''}")
         break
 
+    round_tool_msgs = []
     for tc in msg.tool_calls:
         try:
             fn = TOOLS_BY_NAME[tc.function.name]
@@ -178,17 +202,36 @@ while iteration < MAX_ITERATIONS:
             print(f"  ! {result}")
         preview = result if len(result) < 2000 else result[:2000] + "...[truncated]"
         print(f"  {preview}\n")
-        messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+        tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
+        round_tool_msgs.append(tool_msg)
+        messages.append(tool_msg)
 
-    # Compaction check: fires when a single call's input crosses the threshold.
-    if u.prompt_tokens > COMPACTION_THRESHOLD:
-        before = len(messages)
-        messages, did, ci, co = compact(messages, summarizer_client, SUMMARIZER_MODEL)
-        if did:
-            compactions_fired += 1
-            compact_in += ci
-            compact_out += co
-            print(f"  [COMPACTION FIRED — {before} messages → {len(messages)}, summarizer in={ci} out={co}]\n")
+    # Tool results are most of the context growth: the model only *requests* a tool
+    # (small `out`), but the result it hands back can be huge (a file read). Record
+    # this round's tool-result tokens so the per-iter numbers actually add up.
+    per_iter[-1]["tools_out"] = _count_tokens(round_tool_msgs)
+
+    # Compaction: compact() summarizes the older middle once the MIDDLE's own
+    # token count crosses the threshold, and no-ops otherwise — so it's safe to
+    # call every turn; it only summarizes when there's enough stale middle to be
+    # worth it (and with KEEP small, the fire drops the input hard).
+    before = len(messages)
+    messages, did, ci, co, middle_tok = compact(
+        messages, summarizer_client, SUMMARIZER_MODEL
+    )
+    per_iter[-1][
+        "middle"
+    ] = middle_tok  # compactable-middle size this turn (the sawtooth metric)
+    if did:
+        compactions_fired += 1
+        per_iter[-1][
+            "compacted"
+        ] = True  # the middle crossed the threshold this iteration
+        compact_in += ci
+        compact_out += co
+        print(
+            f"  [COMPACTION FIRED — {before} messages → {len(messages)}, summarizer in={ci} out={co}]\n"
+        )
 else:
     print(f"\n=== MAX_ITERATIONS REACHED ({MAX_ITERATIONS}) — aborting ===")
 
