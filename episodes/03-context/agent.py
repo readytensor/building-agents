@@ -35,12 +35,7 @@ load_dotenv(Path("../../.env"))
 
 import tools  # noqa: E402  module ref so the loop can set tools.CURRENT_ROUND each turn
 from tools import SANDBOX, TOOL_DEFS, TOOLS_BY_NAME, write_tool_telemetry  # noqa: E402
-from compaction import (
-    COMPACTION_THRESHOLD,
-    KEEP_LAST_ITERATIONS,
-    compact,
-    _count_tokens,
-)  # noqa: E402
+from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact, _count_tokens  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -81,11 +76,8 @@ client = OpenAI(api_key=api_key_for(BASE_URL), base_url=BASE_URL or None)
 SUMMARIZER_BASE_URL = os.environ.get("LLM_SUMMARIZER_BASE_URL") or BASE_URL
 SUMMARIZER_MODEL = os.environ.get("LLM_SUMMARIZER_MODEL") or MODEL
 summarizer_client = (
-    client
-    if SUMMARIZER_BASE_URL == BASE_URL
-    else OpenAI(
-        api_key=api_key_for(SUMMARIZER_BASE_URL), base_url=SUMMARIZER_BASE_URL or None
-    )
+    client if SUMMARIZER_BASE_URL == BASE_URL
+    else OpenAI(api_key=api_key_for(SUMMARIZER_BASE_URL), base_url=SUMMARIZER_BASE_URL or None)
 )
 
 # --- Loop safety cap to prevent an infinite loop. (Compaction knobs live in
@@ -100,18 +92,16 @@ def write_metrics():
     harness (run.py) reads this and renders the summary. Compaction tokens are
     recorded separately so the harness can show the agent-vs-compaction split."""
     metrics = {
-        "agents": [
-            {
-                "label": "agent",
-                "iterations": iteration,
-                "input_tokens": total_in,
-                "output_tokens": total_out,
-                "compactions": compactions_fired,
-                "compact_in": compact_in,
-                "compact_out": compact_out,
-                "per_iter": per_iter,  # {model_in, model_out, tools, tools_out, middle, compacted} per round
-            }
-        ],
+        "agents": [{
+            "label": "agent",
+            "iterations": iteration,
+            "input_tokens": total_in,
+            "output_tokens": total_out,
+            "compactions": compactions_fired,
+            "compact_in": compact_in,
+            "compact_out": compact_out,
+            "per_iter": per_iter,  # {model_in, model_out, tools, tools_out, middle, compacted} per round
+        }],
         "inputs": {"system": SYSTEM, "task": TASK},
         "config": {
             "MODEL": MODEL,
@@ -152,28 +142,17 @@ per_iter = []
 
 while iteration < MAX_ITERATIONS:
     iteration += 1
-    tools.CURRENT_ROUND = iteration  # tag tool calls with the round they happen in
+    tools.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
     resp = client.chat.completions.create(
-        model=MODEL,
-        messages=messages,
-        tools=TOOL_DEFS,
+        model=MODEL, messages=messages, tools=TOOL_DEFS,
     )
     u = resp.usage
     total_in += u.prompt_tokens
     total_out += u.completion_tokens
-    per_iter.append(
-        {
-            "model_in": u.prompt_tokens,
-            "model_out": u.completion_tokens,
-            "tools": 0,
-            "tools_out": 0,
-            "middle": 0,
-            "compacted": False,
-        }
-    )
+    per_iter.append({"model_in": u.prompt_tokens, "model_out": u.completion_tokens, "tools": 0, "tools_out": 0, "middle": 0, "compacted": False})
 
     msg = resp.choices[0].message
-    per_iter[-1]["tools"] = len(msg.tool_calls or [])  # tool calls requested this round
+    per_iter[-1]["tools"] = len(msg.tool_calls or [])   # tool calls requested this round
     messages.append(msg.model_dump(exclude_none=True))
 
     if not msg.tool_calls:
@@ -216,22 +195,14 @@ while iteration < MAX_ITERATIONS:
     # call every turn; it only summarizes when there's enough stale middle to be
     # worth it (and with KEEP small, the fire drops the input hard).
     before = len(messages)
-    messages, did, ci, co, middle_tok = compact(
-        messages, summarizer_client, SUMMARIZER_MODEL
-    )
-    per_iter[-1][
-        "middle"
-    ] = middle_tok  # compactable-middle size this turn (the sawtooth metric)
+    messages, did, ci, co, middle_tok = compact(messages, summarizer_client, SUMMARIZER_MODEL)
+    per_iter[-1]["middle"] = middle_tok   # compactable-middle size this turn (the sawtooth metric)
     if did:
         compactions_fired += 1
-        per_iter[-1][
-            "compacted"
-        ] = True  # the middle crossed the threshold this iteration
+        per_iter[-1]["compacted"] = True   # the middle crossed the threshold this iteration
         compact_in += ci
         compact_out += co
-        print(
-            f"  [COMPACTION FIRED — {before} messages → {len(messages)}, summarizer in={ci} out={co}]\n"
-        )
+        print(f"  [COMPACTION FIRED — {before} messages → {len(messages)}, summarizer in={ci} out={co}]\n")
 else:
     print(f"\n=== MAX_ITERATIONS REACHED ({MAX_ITERATIONS}) — aborting ===")
 

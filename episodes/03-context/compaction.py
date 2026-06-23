@@ -34,12 +34,8 @@ _ENC = get_encoding("cl100k_base")
 
 # --- Compaction knobs. Env-overridable; defaults shown below. Both are used in
 # compact(): the threshold gates on the middle's token count, KEEP sets the tail.
-COMPACTION_THRESHOLD = int(
-    os.environ.get("EP3_THRESHOLD", 20_000)
-)  # tokens in the compactable middle before we summarize it.
-KEEP_LAST_ITERATIONS = int(
-    os.environ.get("EP3_KEEP", 2)
-)  # recent assistant rounds preserved uncompacted.
+COMPACTION_THRESHOLD = int(os.environ.get("EP3_THRESHOLD", 20_000))  # tokens in the compactable middle before we summarize it.
+KEEP_LAST_ITERATIONS = int(os.environ.get("EP3_KEEP", 2))            # recent assistant rounds preserved uncompacted.
 
 SUMMARIZER_PROMPT = (
     "You're summarizing an in-progress coding-agent transcript so the agent can keep "
@@ -73,9 +69,7 @@ def _format_as_transcript(messages):
             # giant dump can't blow up the summarizer call. 5K chars leaves normal
             # tool results intact, so the summarizer sees ~what the agent saw — the
             # content that actually drove the compaction trigger.
-            preview = (
-                content if len(content) < 5000 else content[:5000] + "...[truncated]"
-            )
+            preview = content if len(content) < 5000 else content[:5000] + "...[truncated]"
             out.append(f"TOOL RESULT: {preview}")
         else:
             out.append(f"{role.upper()}: {content}")
@@ -88,7 +82,7 @@ def _count_tokens(messages):
     parts = []
     for m in messages:
         parts.append(str(m.get("content") or ""))
-        for tc in m.get("tool_calls") or []:
+        for tc in (m.get("tool_calls") or []):
             parts.append(str(tc.get("function", {}).get("arguments", "")))
     return len(_ENC.encode("\n".join(parts)))
 
@@ -101,7 +95,7 @@ def compact(messages, client, model):
     asst_positions = [i for i, m in enumerate(messages) if m.get("role") == "assistant"]
     if len(asst_positions) <= KEEP_LAST_ITERATIONS:
         return messages, False, 0, 0, 0
-    head = messages[:2]  # system + original user task
+    head = messages[:2]                            # system + original user task
     tail_start = asst_positions[-KEEP_LAST_ITERATIONS]
     middle = messages[2:tail_start]
     tail = messages[tail_start:]
@@ -118,13 +112,10 @@ def compact(messages, client, model):
 
     summarizer_msgs = [
         {"role": "system", "content": SUMMARIZER_PROMPT},
-        {
-            "role": "user",
-            "content": (
-                f"Original task:\n{head[1]['content']}\n\n"
-                f"Transcript to summarize:\n{_format_as_transcript(middle)}"
-            ),
-        },
+        {"role": "user", "content": (
+            f"Original task:\n{head[1]['content']}\n\n"
+            f"Transcript to summarize:\n{_format_as_transcript(middle)}"
+        )},
     ]
     summary_resp = client.chat.completions.create(model=model, messages=summarizer_msgs)
     summary_text = summary_resp.choices[0].message.content or ""
@@ -137,10 +128,4 @@ def compact(messages, client, model):
         ),
     }
     su = summary_resp.usage
-    return (
-        head + [summary_msg] + tail,
-        True,
-        su.prompt_tokens,
-        su.completion_tokens,
-        middle_tokens,
-    )
+    return head + [summary_msg] + tail, True, su.prompt_tokens, su.completion_tokens, middle_tokens
