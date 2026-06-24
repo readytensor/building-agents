@@ -37,7 +37,7 @@ load_dotenv(Path("../../.env"))
 
 import tools  # noqa: E402  module ref so the loop can set tools.CURRENT_ROUND each turn
 from tools import SANDBOX, TOOLS as BASE_TOOLS, write_tool_telemetry  # noqa: E402
-from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact  # noqa: E402
+from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact, _count_tokens  # noqa: E402
 from planning import write_plan, think, system_with_plan  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -112,7 +112,7 @@ def write_metrics():
             # "reasoning" is the shared metrics key across Eps 4-6 + run.py —
             # a stable grouping for the two new tools' call counts.
             "reasoning": {"write_plan": plan_writes, "think": think_calls},
-            "per_iter": per_iter,  # [input, output] for each LLM call
+            "per_iter": per_iter,  # {model_in, model_out, tools, tools_out, middle, compacted} per round
         }],
         "inputs": {"system": SYSTEM, "task": TASK},
         "config": {
@@ -182,9 +182,10 @@ while iteration < MAX_ITERATIONS:
     u = resp.usage
     total_in += u.prompt_tokens
     total_out += u.completion_tokens
-    per_iter.append([u.prompt_tokens, u.completion_tokens])
+    per_iter.append({"model_in": u.prompt_tokens, "model_out": u.completion_tokens, "tools": 0, "tools_out": 0, "middle": 0, "compacted": False})
 
     msg = resp.choices[0].message
+    per_iter[-1]["tools"] = len(msg.tool_calls or [])   # tool calls requested this round
     messages.append(msg.model_dump(exclude_none=True))
 
     if not msg.tool_calls:
@@ -192,6 +193,7 @@ while iteration < MAX_ITERATIONS:
         print(f"\n=== FINAL RESPONSE ===\n\n{msg.content or ''}")
         break
 
+    round_tool_msgs = []
     for tc in msg.tool_calls:
         try:
             fn = TOOLS_BY_NAME[tc.function.name]
@@ -216,17 +218,28 @@ while iteration < MAX_ITERATIONS:
             print(f"  ! {result}")
         preview = result if len(result) < 2000 else result[:2000] + "...[truncated]"
         print(f"  {preview}\n")
-        messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+        tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
+        round_tool_msgs.append(tool_msg)
+        messages.append(tool_msg)
 
-    # Compaction check: fires when a single call's input crosses the threshold.
-    if u.prompt_tokens > COMPACTION_THRESHOLD:
-        before = len(messages)
-        messages, did, ci, co = compact(messages, summarizer_client, SUMMARIZER_MODEL)
-        if did:
-            compactions_fired += 1
-            compact_in += ci
-            compact_out += co
-            print(f"  [COMPACTION FIRED — {before} messages → {len(messages)}, summarizer in={ci} out={co}]\n")
+    # Tool results are most of the context growth: the model only *requests* a tool
+    # (small `out`), but the result it hands back can be huge (a file read). Record
+    # this round's tool-result tokens so the per-iter numbers actually add up.
+    per_iter[-1]["tools_out"] = _count_tokens(round_tool_msgs)
+
+    # Compaction: compact() summarizes the older middle once the MIDDLE's own
+    # token count crosses the threshold, and no-ops otherwise — so it's safe to
+    # call every turn; it only summarizes when there's enough stale middle to be
+    # worth it (and with KEEP small, the fire drops the input hard).
+    before = len(messages)
+    messages, did, ci, co, middle_tok = compact(messages, summarizer_client, SUMMARIZER_MODEL)
+    per_iter[-1]["middle"] = middle_tok   # compactable-middle size this turn (the sawtooth metric)
+    if did:
+        compactions_fired += 1
+        per_iter[-1]["compacted"] = True   # the middle crossed the threshold this iteration
+        compact_in += ci
+        compact_out += co
+        print(f"  [COMPACTION FIRED — {before} messages → {len(messages)}, summarizer in={ci} out={co}]\n")
 else:
     print(f"\n=== MAX_ITERATIONS REACHED ({MAX_ITERATIONS}) — aborting ===")
 

@@ -1,10 +1,10 @@
 """
 Episode 3 — Context
 
-Adds one thing to Ep 2's agent: rolling-summary compaction. When a single LLM
-call's input crosses COMPACTION_THRESHOLD, the older middle of the message
-history is summarized and replaced with one summary message — so a long-running
-task doesn't keep re-paying for the full transcript on every turn.
+Adds one thing to Ep 2's agent: rolling-summary compaction. When the compactable
+*middle* of the message history grows past COMPACTION_THRESHOLD, that middle is
+summarized and replaced with one summary message — so a long-running task doesn't
+keep re-paying for the full transcript on every turn.
 
 The action space is unchanged from Ep 2 (same tools.py). Completion is still the
 natural stop: the loop ends when the model emits no tool calls — its trained
