@@ -827,7 +827,7 @@ try:
             except (TypeError, KeyError, ValueError) as e:
                 result = f"Error executing {tu.name}: {type(e).__name__}: {e}"
                 print(f"  ! {result}")
-            preview = result if len(result) < 2000 else result[:2000] + "...[truncated]"
+            preview = result if len(result) < 5000 else result[:5000] + "...[truncated]"
             print(f"  {preview}\n")
             tool_results.append({
                 "type": "tool_result",

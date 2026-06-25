@@ -162,7 +162,7 @@ while True:
             # The model can self-correct on the next iteration.
             result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
             print(f"  ! {result}")
-        preview = result if len(result) < 2000 else result[:2000] + "...[truncated]"
+        preview = result if len(result) < 5000 else result[:5000] + "...[truncated]"
         print(f"  {preview}\n")
         tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
         round_tool_msgs.append(tool_msg)

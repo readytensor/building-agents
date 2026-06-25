@@ -104,7 +104,7 @@ def _preview_args(args: dict) -> str:
     return ", ".join(parts)
 
 
-def _truncate(text: str, limit: int = 2000) -> str:
+def _truncate(text: str, limit: int = 5000) -> str:
     """Truncate a tool-result string for transcript display."""
     if len(text) < limit:
         return text

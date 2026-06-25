@@ -196,10 +196,10 @@ while True:
         TOOL_CALLS.append({"round": iteration, "tool": tc.function.name, "args": args})
         print(f"> bash({args['command']!r})")
         result = bash(**args)
-        if len(result) < 2000:
+        if len(result) < 5000:
             preview = result
         else:
-            preview = result[:2000] + "...[truncated]"
+            preview = result[:5000] + "...[truncated]"
         print(f"  {preview}\n")
         tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
         round_tool_msgs.append(tool_msg)
