@@ -19,7 +19,7 @@ Because skills live in agent state, not message history, they survive
 compaction and keep the message prefix stable.
 
 Everything else is inherited: the action space (tools.py), rolling-summary
-compaction (compaction.py), plan + think (planning.py), the sandbox reset,
+compaction (compaction.py), the plan (planning.py), the sandbox reset,
 and the natural stop — the loop ends when the model emits no tool calls.
 (No self-assessed done tool; rigorous, externally-verified completion is the
 job of the `verification` skill, which runs the tests before the agent stops.)
@@ -47,7 +47,7 @@ import skills  # noqa: E402  module ref so the loop can read skills.LOADED_TOOLS
 import tools  # noqa: E402  module ref so the loop can set tools.CURRENT_ROUND each turn
 from tools import SANDBOX, TOOLS as FILE_TOOLS, write_tool_telemetry  # noqa: E402
 from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact, _count_tokens  # noqa: E402
-from planning import write_plan, think, system_with_plan  # noqa: E402
+from planning import write_plan, system_with_plan  # noqa: E402
 from skills import list_skills, load_skill, system_with_skills  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -96,12 +96,12 @@ summarizer_client = (
 # compaction.py.)
 MAX_ITERATIONS = int(os.environ.get("EP5_MAX_ITER", 200))
 
-# --- 3. Tool registry. The base tools are always available: Ep 4's eight
-# (six file primitives + write_plan + think) plus Ep 5's two skill tools
-# (list_skills, load_skill). Skill-provided tools (web_search, lint, …) are
-# NOT here — load_skill adds them to skills.LOADED_TOOLS, and the loop merges
-# that in each turn, so a tool the agent unlocks mid-run becomes callable.
-BASE_TOOLS = FILE_TOOLS + [write_plan, think, list_skills, load_skill]
+# --- 3. Tool registry. The base tools are always available: Ep 4's seven
+# (six file primitives + write_plan) plus Ep 5's two skill tools (list_skills,
+# load_skill). Skill-provided tools (web_search, lint, …) are NOT here —
+# load_skill adds them to skills.LOADED_TOOLS, and the loop merges that in each
+# turn, so a tool the agent unlocks mid-run becomes callable.
+BASE_TOOLS = FILE_TOOLS + [write_plan, list_skills, load_skill]
 BASE_TOOLS_BY_NAME = {t.__name__: t for t in BASE_TOOLS}
 
 
@@ -118,8 +118,8 @@ def live_tools():
 def write_metrics():
     """Write this run's token usage to metrics.json. Recording only — the
     harness (run.py) reads this and renders the summary. Compaction tokens,
-    the write_plan/think counts, and the skill-use counts are all recorded
-    separately so the harness can show each section."""
+    the write_plan count, and the skill-use counts are all recorded separately
+    so the harness can show each section."""
     metrics = {
         "agents": [{
             "label": "agent",
@@ -129,7 +129,7 @@ def write_metrics():
             "compactions": compactions_fired,
             "compact_in": compact_in,
             "compact_out": compact_out,
-            "reasoning": {"write_plan": plan_writes, "think": think_calls},
+            "reasoning": {"write_plan": plan_writes},
             "skills": {
                 "list_skills": list_skills_calls,
                 "load_skill": load_skill_calls,
@@ -196,7 +196,6 @@ compact_in = compact_out = 0
 iteration = 0
 compactions_fired = 0
 plan_writes = 0
-think_calls = 0
 list_skills_calls = 0
 load_skill_calls = 0
 loaded_skill_names: list[str] = []
@@ -248,8 +247,6 @@ while iteration < MAX_ITERATIONS:
             result = fn(**args)
             if tc.function.name == "write_plan":
                 plan_writes += 1
-            elif tc.function.name == "think":
-                think_calls += 1
             elif tc.function.name == "list_skills":
                 list_skills_calls += 1
             elif tc.function.name == "load_skill":

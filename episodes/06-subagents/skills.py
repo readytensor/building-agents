@@ -1,5 +1,5 @@
 """
-Episode 6 — Orchestration (skills, carried forward from Ep 5)
+Episode 6 — Subagents (skills, carried forward from Ep 5)
 
 Ep 5's skill system — list_skills + load_skill + the skill-provided tools —
 carried forward, but adapted to Ep 6's recursive runtime.

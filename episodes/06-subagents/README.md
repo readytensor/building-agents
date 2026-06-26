@@ -1,4 +1,4 @@
-# Episode 6: Orchestration
+# Episode 6: Subagents
 
 **Concept:** one agent becomes many. An *orchestrator* breaks a task into independent subtasks and `delegate`s each to a fresh worker agent; independent workers run in parallel, and a dedicated *verifier* owns completion. It's Ep 5's loop, made reentrant, plus one new tool and one new config primitive.
 

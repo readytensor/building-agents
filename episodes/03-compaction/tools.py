@@ -1,26 +1,19 @@
 """
-Episode 6 — Orchestration (tools)
+Episode 3 — Compaction (tools)
 
-The agent's action space — the same six file primitives carried forward
-(bash, list_files, read, write, edit, grep) plus the tiny @tool decorator
-that builds each tool's JSON-schema from its signature.
+The agent's action space — unchanged from Ep 2: the same six general primitives
+(bash, list_files, read, write, edit, grep) plus the tiny @tool decorator that
+builds each tool's JSON-schema from its signature. Ep 3 adds nothing to the
+action space; what changes this episode is context management — compaction (see
+compaction.py) — not the tools.
 
-One difference from Ep 5's tools.py: the @tool decorator here does NOT record
-tool-call telemetry itself. Ep 6 runs many agents concurrently (the
-orchestrator plus parallel workers), so each call has to be tagged with WHICH
-agent made it — and the decorator can't see that. run_agent (in agent.py)
-records each call with its worker label instead. This file just owns the
-shared TOOL_CALLS list + the writer; agent.py appends the tagged records.
-
-TOOL_FUNCTIONS is the menu of always-available file tools. A worker's actual
-toolset is a per-call subset of this (plus closures + skill tools), assembled
-in run_agent from the worker's .agents/<name>.md allowlist.
-
-Imports nothing from agent.py (one-way `agent → tools`). Every tool resolves
-paths inside SANDBOX, defined here; agent.py owns the sandbox *reset*.
+As in Ep 2, the tools live here, separate from the agent loop, and import
+nothing from agent.py (one-way `agent → tools`). Every tool resolves paths
+inside SANDBOX, defined here; agent.py owns the sandbox *reset*.
 
 See ../../README.md for context.
 """
+import functools
 import inspect
 import json
 import re
@@ -32,16 +25,19 @@ from typing import get_type_hints
 # copy of initial/ at the start of each run.
 SANDBOX = Path("sandbox")
 
-# --- Tool-call telemetry. The list is shared across all agents; run_agent
-# appends one record per call, tagged with the worker that made it. Written to
-# tool_calls.jsonl at the end of the run; the harness (run.py) renders it.
-TOOL_CALLS = []  # list of {"round": n, "agent": label, "tool": name, "args": {...}}
+# --- Tool-call telemetry: record every tool the agent invokes, in order, so we
+# can see the path it took and how many calls it made (this varies run to run).
+# Recorded in the @tool wrapper below and written to tool_calls.jsonl at the end
+# of the run; the harness (run.py) renders the summary.
+TOOL_CALLS = []  # list of {"round": n, "tool": name, "args": {...}} in call order
+CURRENT_ROUND = 0  # the agent-loop iteration; agent.py sets it each turn so every
+# recorded tool call is tagged with the round (model call) it happened in
 
 
 def write_tool_telemetry():
     """Write the tool calls made this run to tool_calls.jsonl, one JSON object
-    per line in call order (each tagged with the agent that made it). Recording
-    only — rendering a summary is left to whatever reads the file."""
+    per line in call order. Recording only — rendering a summary is left to
+    whatever reads the file."""
     with open("tool_calls.jsonl", "w", encoding="utf-8") as f:
         for call in TOOL_CALLS:
             f.write(json.dumps(call) + "\n")
@@ -61,7 +57,16 @@ def tool(description: str):
             properties[name] = {"type": json_types.get(t, "string")}
             if param.default is inspect.Parameter.empty:
                 required.append(name)
-        func.tool_definition = {
+
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            # Record the call before running it, so the path stays correct even
+            # if the tool raises.
+            bound = sig.bind(*args, **kwargs)
+            TOOL_CALLS.append({"round": CURRENT_ROUND, "tool": func.__name__, "args": dict(bound.arguments)})
+            return func(*args, **kwargs)
+
+        wrapper.tool_definition = {
             "type": "function",
             "function": {
                 "name": func.__name__,
@@ -74,7 +79,7 @@ def tool(description: str):
                 },
             },
         }
-        return func
+        return wrapper
     return decorator
 
 
@@ -178,7 +183,7 @@ def grep(pattern: str, path: str = ".") -> str:
     return "\n".join(results) if results else f"No matches for {pattern!r}."
 
 
-# --- The menu of always-available file tools, by name. A worker's actual
-# toolset is assembled per-call in run_agent from its allowlist (plus the
-# planning/skills closures and any skill-provided tools).
-TOOL_FUNCTIONS = {fn.__name__: fn for fn in [bash, list_files, read, write, edit, grep]}
+# --- Tool registry: name -> callable, plus the list of schemas for the LLM.
+TOOLS = [bash, list_files, read, write, edit, grep]
+TOOLS_BY_NAME = {t.__name__: t for t in TOOLS}
+TOOL_DEFS = [t.tool_definition for t in TOOLS]

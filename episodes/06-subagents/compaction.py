@@ -1,5 +1,5 @@
 """
-Episode 6 — Orchestration (compaction)
+Episode 6 — Subagents (compaction)
 
 Ep 3's headline mechanism, carried forward unchanged: rolling-summary
 compaction. When the compactable *middle* of the message history grows past

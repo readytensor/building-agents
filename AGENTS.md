@@ -15,7 +15,7 @@ building-agents/
 │   │   ├── agent.py      # the episode's agent: start here
 │   │   ├── initial/      # pristine starting copy of the md2html project
 │   │   └── sandbox/      # where the agent works (recreated every run)
-│   ├── 02-tools/  03-context/  04-planning-thinking/  05-skills/  06-orchestration/
+│   ├── 02-tools/  03-compaction/  04-working-memory/  05-skills/  06-subagents/
 ├── run.py                # optional harness to record a run
 ├── capture.py            # terminal recorder used by run.py --capture
 └── requirements.txt
@@ -31,7 +31,7 @@ diff episodes/01-loop/agent.py episodes/02-tools/agent.py   # what one idea adde
 
 - **Never modify `initial/`.** It is the pristine template the agent starts from. Every `agent.py` begins by wiping `sandbox/` and copying `initial/` into it, so each run starts from an identical clean state. If you change `initial/`, you change the experiment.
 - **`sandbox/` is ephemeral.** It is recreated on every run and is gitignored. Don't keep anything there you care about, and don't be surprised when it resets.
-- **Stay inside one episode.** A change for Episode 3 belongs in `episodes/03-context/`. Don't edit one episode's files to fix another, and don't let one episode's `agent.py` reach into another's directory.
+- **Stay inside one episode.** A change for Episode 3 belongs in `episodes/03-compaction/`. Don't edit one episode's files to fix another, and don't let one episode's `agent.py` reach into another's directory.
 - **The diff between episodes is the lesson.** When you add or change something, keep the *delta* from the previous episode small and legible: that delta is the teaching point, not just the end state.
 
 ## Verify your work

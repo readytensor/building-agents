@@ -16,10 +16,10 @@ The worked example is a **coding agent**, the cleanest domain to learn in: a tig
 | --- | ------------------- | -------------------------------------------- | ------------------------------------------------------------------------------- |
 | 1   | The Loop            | What is an agent?                            | A minimal agent: a `while` loop + one `bash` tool                               |
 | 2   | Tools               | How does it actually do things?              | General primitives (`read` / `write` / `edit` / `grep`) + a tiny `@tool` helper |
-| 3   | Context             | Why does it get worse on long tasks?         | Rolling-summary compaction to keep long runs affordable                         |
-| 4   | Planning & Thinking | What does it cost to make the agent legible? | `write_plan` + `think`, plus a dynamic system prompt                            |
+| 3   | Compaction          | Why does it get worse on long tasks?         | Rolling-summary compaction to keep long runs affordable                         |
+| 4   | Working Memory      | How does a long task stay on track?          | `write_plan` kept in durable agent state that survives compaction               |
 | 5   | Skills              | How does it reach beyond its fixed toolkit?  | A lazy-loaded skills system (`list_skills` / `load_skill` + `SKILL.md`)         |
-| 6   | Orchestration       | When is one agent the wrong shape?           | `delegate` + worker configs + parallel multi-agent dispatch                     |
+| 6   | Subagents           | When is one agent the wrong shape?           | `delegate` + worker configs + parallel multi-agent dispatch                     |
 
 Each episode follows the same rhythm: one question, one limitation, one addition in code, one before/after.
 
@@ -58,10 +58,10 @@ building-agents/
 │   │   ├── initial/      # pristine starting copy of the example project
 │   │   └── sandbox/      # where the agent works (recreated every run)
 │   ├── 02-tools/
-│   ├── 03-context/
-│   ├── 04-planning-thinking/
+│   ├── 03-compaction/
+│   ├── 04-working-memory/
 │   ├── 05-skills/
-│   └── 06-orchestration/
+│   └── 06-subagents/
 ├── run.py               # optional harness to record a run (see below)
 ├── capture.py           # terminal recorder used by run.py --capture
 ├── requirements.txt

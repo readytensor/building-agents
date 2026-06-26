@@ -1,29 +1,19 @@
 """
 Episode 5 — Skills (planning, carried forward from Ep 4)
 
-Ep 4's contribution, carried forward unchanged: two tools plus the
-dynamic system-prompt mechanism that ties them in. Ep 5's skill system
-builds directly on this mechanism — loaded-skill bodies ride into the
-system prompt the same way the plan does (see skills.system_with_skills).
+Ep 4's contribution, carried forward unchanged: the write_plan tool plus the
+dynamic system-prompt mechanism that ties it in. Ep 5's skill system builds
+directly on this mechanism — loaded-skill bodies ride into the system prompt
+the same way the plan does (see skills.system_with_skills).
 
-1. write_plan(steps) — a Claude Code TodoWrite-style structured plan that lives
-   in agent *state* (the CURRENT_PLAN global), not in message history. Each
-   iteration the loop rebuilds the system prompt with the current plan appended
-   (see system_with_plan), so the plan is always in front of the model and —
-   because it lives in state, not messages — survives compaction untouched.
+write_plan(steps) is a structured plan that lives in agent *state* (the
+CURRENT_PLAN global), not in message history. Each iteration the loop rebuilds
+the system prompt with the current plan appended (see system_with_plan), so the
+plan is always in front of the model and — because it lives in state, not
+messages — survives compaction untouched.
 
-2. think(thought) — a no-op tool that echoes the thought back. Forcing the
-   model to write the thought out is the whole point: it externalizes reasoning
-   before action.
-
-The two tools have distinct jobs (see their descriptions). Keeping them, the
-plan state, and the system-prompt builder together here mirrors how Ep 3 kept
-its new mechanism in compaction.py: the episode's addition is legible in one
-file, and tools.py / compaction.py / agent.py stay as they were.
-
-Imports one-way from tools (`planning → tools`, for the @tool decorator), like
-agent.py imports from both. agent.py owns the base SYSTEM string and calls
-system_with_plan() each turn.
+Imports one-way from tools (`planning → tools`, for the @tool decorator).
+agent.py owns the base SYSTEM string and calls system_with_plan() each turn.
 
 See ../../README.md for context.
 """
@@ -67,11 +57,9 @@ def system_with_plan(base_system: str) -> str:
     "(a) a string describing the step, or (b) a dict with 'content' (string) "
     "and 'status' (one of 'pending', 'in_progress', 'completed'). Call this "
     "at the start of a task with multiple distinct subtasks, and again "
-    "whenever you complete a step or revise your approach. The plan is "
-    "always visible to you in subsequent iterations. "
-    "USE THIS FOR: tracking progress through multiple distinct subtasks. "
-    "NOT FOR: in-the-moment reasoning about a single hard problem — for that, "
-    "use the `think` tool."
+    "whenever you complete a step or revise your approach. The plan is always "
+    "visible to you in subsequent iterations, and it persists in agent state, "
+    "so it survives compaction untouched."
 )
 def write_plan(steps) -> str:
     # Defensive: schema typing for list-of-X isn't tight, so the model sometimes
@@ -94,15 +82,3 @@ def write_plan(steps) -> str:
             })
         # silently skip any other shape
     return f"Plan updated ({len(CURRENT_PLAN)} steps):\n{format_plan(CURRENT_PLAN)}"
-
-
-@tool(
-    "Externalize your reasoning about a hard problem or decision. Pass a "
-    "thought as a string; it is echoed back unchanged. The act of writing "
-    "the thought out forces explicit reasoning before action. "
-    "USE THIS FOR: weighing alternative approaches before choosing one, "
-    "reasoning through a tricky edge case, untangling a confusing problem. "
-    "NOT FOR: tracking multi-step task progress — for that, use `write_plan`."
-)
-def think(thought: str) -> str:
-    return thought

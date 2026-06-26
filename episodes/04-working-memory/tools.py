@@ -1,13 +1,15 @@
 """
-Episode 3 — Context (tools)
+Episode 4 — Working Memory (tools)
 
-The agent's action space — unchanged from Ep 2: the same six general primitives
-(bash, list_files, read, write, edit, grep) plus the tiny @tool decorator that
-builds each tool's JSON-schema from its signature. Ep 3 adds nothing to the
-action space; what changes this episode is context management — compaction (see
-compaction.py) — not the tools.
+The agent's action space — carried forward from Ep 3 unchanged: the same six
+general primitives (bash, list_files, read, write, edit, grep) plus the tiny
+@tool decorator that builds each tool's JSON-schema from its signature.
 
-As in Ep 2, the tools live here, separate from the agent loop, and import
+Ep 4's new tool (write_plan) is tied to the plan-injection mechanism, so it
+lives in planning.py — not here. This file is identical to Ep 3's tools.py:
+the file primitives don't change this episode.
+
+As in Ep 3, the tools live here, separate from the agent loop, and import
 nothing from agent.py (one-way `agent → tools`). Every tool resolves paths
 inside SANDBOX, defined here; agent.py owns the sandbox *reset*.
 
@@ -61,7 +63,7 @@ def tool(description: str):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             # Record the call before running it, so the path stays correct even
-            # if the tool raises (e.g. done() raises TaskComplete).
+            # if the tool raises.
             bound = sig.bind(*args, **kwargs)
             TOOL_CALLS.append({"round": CURRENT_ROUND, "tool": func.__name__, "args": dict(bound.arguments)})
             return func(*args, **kwargs)
@@ -184,6 +186,8 @@ def grep(pattern: str, path: str = ".") -> str:
 
 
 # --- Tool registry: name -> callable, plus the list of schemas for the LLM.
+# Ep 4 extends this with the planning tool in agent.py (TOOLS + [write_plan]);
+# these six are the carried-forward base.
 TOOLS = [bash, list_files, read, write, edit, grep]
 TOOLS_BY_NAME = {t.__name__: t for t in TOOLS}
 TOOL_DEFS = [t.tool_definition for t in TOOLS]

@@ -13,8 +13,8 @@ tasks have more than one criterion ("tests pass" is usually the easy one).
 ## The verification checklist
 
 1. **Re-read the original task.** Enumerate every acceptance criterion
-   it mentions, explicitly or implicitly. Use `think()` to write them
-   down — this is the audit trail.
+   it mentions, explicitly or implicitly. Write them down — this is the
+   audit trail.
 2. **Run the test suite:** `bash("pytest -q")`. ALL tests pass?
 3. **Lint:** `lint()`. Clean?
 4. **(If applicable) Coverage:** `coverage()`. New code covered by
@@ -23,8 +23,8 @@ tasks have more than one criterion ("tests pass" is usually the easy one).
    refactor unrelated code," run `bash("git diff --stat")` (or similar)
    to verify the diff is bounded to what the task required.
 6. **Tie evidence to criteria:** for each criterion, point to the
-   evidence that satisfies it. Use `think()` to write this out as a
-   short list. Skipping this step is how silent regressions ship.
+   evidence that satisfies it. Write this out as a short list.
+   Skipping this step is how silent regressions ship.
 7. **Only then:** stop calling tools and write a clear final summary.
 
 ## Evidence-before-assertion

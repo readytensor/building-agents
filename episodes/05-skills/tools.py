@@ -6,7 +6,7 @@ general primitives (bash, list_files, read, write, edit, grep) plus the tiny
 @tool decorator that builds each tool's JSON-schema from its signature.
 
 Ep 5's skill system (list_skills, load_skill, and the skill-provided tools)
-lives in skills.py; Ep 4's plan/think tools live in planning.py — not here.
+lives in skills.py; Ep 4's write_plan tool lives in planning.py — not here.
 This file is identical to Ep 4's tools.py: the file primitives don't change.
 
 As in Ep 4, the tools live here, separate from the agent loop, and import
@@ -186,8 +186,8 @@ def grep(pattern: str, path: str = ".") -> str:
 
 
 # --- Tool registry: name -> callable, plus the list of schemas for the LLM.
-# Ep 4 extends this with the planning tools in agent.py (TOOLS + [write_plan,
-# think]); these six are the carried-forward base.
+# Ep 4 extends this with the planning tool in agent.py (TOOLS + [write_plan]);
+# these six are the carried-forward base.
 TOOLS = [bash, list_files, read, write, edit, grep]
 TOOLS_BY_NAME = {t.__name__: t for t in TOOLS}
 TOOL_DEFS = [t.tool_definition for t in TOOLS]

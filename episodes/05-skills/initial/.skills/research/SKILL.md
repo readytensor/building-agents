@@ -33,8 +33,8 @@ search and read first, code second.
    docs > vendor blog > third-party tutorial > random GitHub gist).
 3. Triangulate when stakes are high: at least one official source plus
    one independent confirmation.
-4. Note what you actually used. A `think()` call or a code comment
-   pointing to the URL lets a reviewer (or future-you) verify.
+4. Note what you actually used. A code comment pointing to the URL
+   lets a reviewer (or future-you) verify.
 
 ## Counter-patterns
 

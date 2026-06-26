@@ -1,25 +1,25 @@
 """
-Episode 3 — Context (compaction)
+Episode 4 — Working Memory (compaction)
 
-This episode's headline mechanism: rolling-summary compaction. When the
-compactable *middle* of the message history grows past COMPACTION_THRESHOLD, that
-middle is summarized via a second LLM call and replaced with one summary message
-— so a long-running task doesn't keep paying for the full transcript every turn.
+Ep 3's headline mechanism, carried forward unchanged: rolling-summary
+compaction. When the compactable *middle* of the message history grows past
+COMPACTION_THRESHOLD, that middle is summarized via a second LLM call and
+replaced with one summary message — so a long-running task doesn't keep paying
+for the full transcript every turn.
 
-We trigger on the token count of the *middle* — the part that actually gets
-summarized — not the whole call's input. Counting the total would fire on tokens
-compaction can't touch (the system prompt + the preserved recent rounds), so it
-could trigger with nothing to shrink. The middle is counted with tiktoken (a real
-token count; for non-OpenAI providers it's an approximation, but exact enough for
-a go/no-go trigger).
+This file is identical to Ep 3's compaction.py. We trigger on the token count of
+the *middle* — the part that actually gets summarized — not the whole call's
+input. Counting the total would fire on tokens compaction can't touch (the system
+prompt + the preserved recent rounds), so it could trigger with nothing to
+shrink. The middle is counted with tiktoken (a real token count; for non-OpenAI
+providers it's an approximation, but exact enough for a go/no-go trigger).
 
-It lives in its own file to keep the mechanism legible. compact() needs an LLM
-to write the summary, so it takes the `client` and `model` as arguments rather
-than importing them — that keeps the import one-way (`agent → compaction`, like
-`agent → tools`) and avoids a circular import with agent.py. Because the client
-and model are passed in, the caller is free to summarize on a cheaper model
-(even a different provider) than the main loop — agent.py resolves which from
-the LLM_SUMMARIZER_* env vars.
+compact() needs an LLM to write the summary, so it takes the `client` and
+`model` as arguments rather than importing them — that keeps the import one-way
+(`agent → compaction`, like `agent → tools`) and avoids a circular import with
+agent.py. Because they're passed in, the caller is free to summarize on a cheaper
+model (even a different provider) than the main loop — agent.py resolves which
+from the LLM_SUMMARIZER_* env vars.
 
 See ../../README.md for context.
 """

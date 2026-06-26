@@ -1,15 +1,14 @@
 """
-Episode 6 — Orchestration (planning, carried forward from Ep 4)
+Episode 6 — Subagents (planning, carried forward from Ep 4)
 
-Ep 4's contribution — write_plan + think + the dynamic-system-prompt
-mechanism — carried forward, but adapted to Ep 6's recursive runtime.
+Ep 4's contribution — write_plan + the dynamic-system-prompt mechanism —
+carried forward, but adapted to Ep 6's recursive runtime.
 
 In Eps 4-5 the plan lived in a module-level global (one agent, one plan). Ep 6
 runs many agents at once (the orchestrator plus parallel workers), so the plan
 can't be global — each run_agent call owns its own plan list. make_plan_tool
-binds a write_plan tool to a specific per-call plan via a closure; think is
-stateless, so it stays a plain module-level tool. system_with_plan takes the
-plan as an argument instead of reading a global.
+binds a write_plan tool to a specific per-call plan via a closure; system_with_plan
+takes the plan as an argument instead of reading a global.
 
 Imports one-way from tools (`planning → tools`, for the @tool decorator).
 
@@ -51,8 +50,7 @@ def system_with_plan(base_system: str, plan: list[dict]) -> str:
     "and 'status' (one of 'pending', 'in_progress', 'completed'). Call this "
     "at the start of a multi-step task and again whenever you complete a step "
     "or revise your approach. The plan is always visible to you in subsequent "
-    "iterations. USE THIS FOR: tracking progress through multiple distinct "
-    "subtasks. NOT FOR: in-the-moment reasoning — for that, use `think`."
+    "iterations, and it persists in agent state, so it survives compaction."
 )
 def write_plan(steps) -> str:
     raise RuntimeError("write_plan must be dispatched via make_plan_tool's per-call closure")
@@ -84,15 +82,3 @@ def make_plan_tool(plan: list[dict]):
         return f"Plan updated ({len(plan)} steps):\n{format_plan(plan)}"
     _write_plan.tool_definition = write_plan.tool_definition
     return _write_plan
-
-
-@tool(
-    "Externalize your reasoning about a hard problem or decision. Pass a "
-    "thought as a string; it is echoed back unchanged. The act of writing "
-    "the thought out forces explicit reasoning before action. "
-    "USE THIS FOR: weighing alternative approaches before choosing one, "
-    "reasoning through a tricky edge case. NOT FOR: tracking multi-step "
-    "task progress — for that, use `write_plan`."
-)
-def think(thought: str) -> str:
-    return thought

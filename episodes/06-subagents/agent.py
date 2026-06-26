@@ -1,5 +1,5 @@
 """
-Episode 6 — Orchestration
+Episode 6 — Subagents
 
 Adds a `delegate` tool + worker runtime to Ep 5. The orchestrator (the
 top-level agent) has no codebase-mutation tools; it can only `delegate` to
@@ -105,9 +105,10 @@ summarizer_client = (
 MAX_ITERATIONS = int(os.environ.get("EP6_MAX_ITER", 200))          # orchestrator cap
 MAX_WORKER_ITER = int(os.environ.get("EP6_MAX_WORKER_ITER", 60))   # per-worker cap
 
-# Always-available, stateless tools, by name. Plan/skills tools are per-call
-# closures (bound in run_agent); delegate is bound only for the orchestrator.
-STATELESS_TOOLS = {**tools.TOOL_FUNCTIONS, "think": planning.think}
+# Always-available, stateless file tools, by name. The plan/skills tools are
+# per-call closures (bound in run_agent); delegate is bound only for the
+# orchestrator.
+STATELESS_TOOLS = dict(tools.TOOL_FUNCTIONS)
 
 # --- 3. Thread-safe printing with a per-worker label, so the parallel
 # transcript stays readable ('[orch]', '[w1-implementer]', …).
@@ -175,7 +176,6 @@ class WorkerMetrics:
     compact_in: int = 0
     compact_out: int = 0
     plan_writes: int = 0
-    think_calls: int = 0
     list_skills_calls: int = 0
     load_skill_calls: int = 0
     delegate_calls: int = 0
@@ -200,7 +200,7 @@ def write_metrics():
             "compactions": m.compactions,
             "compact_in": m.compact_in,
             "compact_out": m.compact_out,
-            "reasoning": {"write_plan": m.plan_writes, "think": m.think_calls},
+            "reasoning": {"write_plan": m.plan_writes},
             "skills": {
                 "list_skills": m.list_skills_calls,
                 "load_skill": m.load_skill_calls,
@@ -331,8 +331,8 @@ def run_agent(task: str, agent_type: str) -> str:
     with _METRICS_LOCK:
         GLOBAL_METRICS[label] = metrics
 
-    # Bind this agent_type's allowlisted tools. File tools + think come straight
-    # from STATELESS_TOOLS; plan/skills tools are per-call closures bound to the
+    # Bind this agent_type's allowlisted tools. File tools come straight from
+    # STATELESS_TOOLS; plan/skills tools are per-call closures bound to the
     # state above; delegate is bound only for the orchestrator.
     for tname in cfg.tools:
         if tname in STATELESS_TOOLS:
@@ -413,8 +413,6 @@ def run_agent(task: str, agent_type: str) -> str:
                 result = fn(**args)
                 if tc.function.name == "write_plan":
                     metrics.plan_writes += 1
-                elif tc.function.name == "think":
-                    metrics.think_calls += 1
                 elif tc.function.name == "list_skills":
                     metrics.list_skills_calls += 1
                 elif tc.function.name == "load_skill":
@@ -493,7 +491,7 @@ AGENT_CONFIGS = _load_agent_configs()
 AGENT_CONFIGS["orchestrator"] = AgentConfig(
     name="orchestrator",
     description="(top-level orchestrator; not dispatchable via delegate)",
-    tools=("list_skills", "write_plan", "think", "delegate"),
+    tools=("list_skills", "write_plan", "delegate"),
     skills=(),
     prompt=ORCHESTRATOR_SYSTEM,
 )

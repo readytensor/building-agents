@@ -1,21 +1,24 @@
 """
-Episode 3 — Context
+Episode 4 — Working Memory
 
-Adds one thing to Ep 2's agent: rolling-summary compaction. When the compactable
-*middle* of the message history grows past COMPACTION_THRESHOLD, that middle is
-summarized and replaced with one summary message — so a long-running task doesn't
-keep re-paying for the full transcript on every turn.
+Gives the agent durable, self-maintained state that survives compaction.
 
-The action space is unchanged from Ep 2 (same tools.py). Completion is still the
-natural stop: the loop ends when the model emits no tool calls — its trained
-instinct that the task is done. (Rigorous, externally-verified completion —
-running pre-written tests and only stopping when they pass — arrives later, as
-the verification skill.)
+The mechanism is a *dynamic system prompt*: each iteration the loop rebuilds the
+system message as [stable base + current plan]. Because the plan lives in agent
+state (not message history) it survives compaction untouched, and because it
+rides in the system prompt the message prefix stays stable when the plan is
+unchanged. write_plan (see planning.py) is the worked instance of that durable
+slot — a structured plan the agent writes and updates as it works; the same
+mechanism is what Ep 5 builds on to inject loaded-skill bodies.
 
-This file is just the agent loop. The compaction mechanism gets its own
-compaction.py; both it and tools.py import one-way (`agent → tools`,
-`agent → compaction`) — agent.py owns the LLM client and passes it into
-compact().
+Everything else is Ep 3 unchanged: the action space (tools.py), rolling-summary
+compaction (compaction.py), the sandbox reset, and the natural stop — the loop
+ends when the model emits no tool calls. (No self-assessed done tool; rigorous,
+externally-verified completion arrives later, as the verification skill.)
+
+This file is just the agent loop. It owns the LLM client and passes it into
+compact(); imports are one-way (`agent → tools`, `agent → compaction`,
+`agent → planning`).
 
 See ../../README.md for context.
 """
@@ -29,13 +32,14 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 # Load .env before importing the local modules below — compaction.py reads its
-# knobs (threshold, keep, summarizer model) from the environment at import time,
-# so the .env values have to be present first.
+# knobs (threshold, keep) from the environment at import time, so the .env
+# values have to be present first.
 load_dotenv(Path("../../.env"))
 
 import tools  # noqa: E402  module ref so the loop can set tools.CURRENT_ROUND each turn
-from tools import SANDBOX, TOOL_DEFS, TOOLS_BY_NAME, write_tool_telemetry  # noqa: E402
+from tools import SANDBOX, TOOLS as BASE_TOOLS, write_tool_telemetry  # noqa: E402
 from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact, _count_tokens  # noqa: E402
+from planning import write_plan, system_with_plan  # noqa: E402
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -45,7 +49,6 @@ INITIAL = Path("initial")
 if SANDBOX.exists():
     shutil.rmtree(SANDBOX)
 shutil.copytree(INITIAL, SANDBOX)
-
 
 # --- 2. LLM client. The openai package targets any OpenAI-compatible endpoint;
 # switch providers by changing LLM_BASE_URL / LLM_AGENT_MODEL in .env.
@@ -82,15 +85,22 @@ summarizer_client = (
 
 # --- Loop safety cap to prevent an infinite loop. (Compaction knobs live in
 # compaction.py.)
-MAX_ITERATIONS = int(os.environ.get("EP3_MAX_ITER", 150))
+MAX_ITERATIONS = int(os.environ.get("EP4_MAX_ITER", 150))
+
+# --- 3. Tool registry: Ep 3's six file primitives plus Ep 4's new
+# tool, write_plan. (Tool-call telemetry lives in tools.py.)
+TOOLS = BASE_TOOLS + [write_plan]
+TOOLS_BY_NAME = {t.__name__: t for t in TOOLS}
+TOOL_DEFS = [t.tool_definition for t in TOOLS]
 
 
-# --- 3. Usage telemetry: token counts per run -> metrics.json. The harness
+# --- 4. Usage telemetry: token counts per run -> metrics.json. The harness
 # (run.py) renders the summary. (Tool-call telemetry lives in tools.py.)
 def write_metrics():
     """Write this run's token usage to metrics.json. Recording only — the
     harness (run.py) reads this and renders the summary. Compaction tokens are
-    recorded separately so the harness can show the agent-vs-compaction split."""
+    recorded separately, as is the write_plan count, so the harness can show the
+    agent-vs-compaction split and how often the new tool fired."""
     metrics = {
         "agents": [{
             "label": "agent",
@@ -100,6 +110,9 @@ def write_metrics():
             "compactions": compactions_fired,
             "compact_in": compact_in,
             "compact_out": compact_out,
+            # "reasoning" is the shared metrics key across Eps 4-6 + run.py —
+            # a stable grouping for write_plan's call count.
+            "reasoning": {"write_plan": plan_writes},
             "per_iter": per_iter,  # {model_in, model_out, tools, tools_out, middle, compacted} per round
         }],
         "inputs": {"system": SYSTEM, "task": TASK},
@@ -115,7 +128,7 @@ def write_metrics():
         json.dump(metrics, f, indent=2)
 
 
-# --- 4. The agent loop.
+# --- 5. The agent loop.
 SYSTEM = (
     "You are a coding assistant operating inside a sandboxed working "
     "directory. Use the available tools to investigate, modify, and "
@@ -123,10 +136,23 @@ SYSTEM = (
     "guess. When the task is complete, stop calling tools and produce "
     "a clear summary of what you did."
 )
-TASK = """I'm about to start adding inline tokens to the parser, and the
-generic name `Node` for our AST type is going to get confusing. Can you
-rename `Node` to `ASTNode` throughout the codebase? The change is purely
-naming — semantics stay identical. All tests should pass after."""
+TASK = """I want to add support for reference-style links to our markdown
+library. They look like this:
+
+    Here is a [link][myref] in text.
+
+    [myref]: https://example.com "Optional title"
+
+The link definitions (the `[id]: url "title"` lines) get collected from
+the document, and inline `[text][id]` references resolve to <a> elements
+using those URLs. The definition lines themselves should NOT appear in
+the rendered output.
+
+I've added a test fixture at tests/fixtures/reference_style_links.md and
+tests/fixtures/reference_style_links.html showing the expected behavior.
+Right now pytest fails on it because the feature isn't implemented.
+
+Can you add reference-style links? Make sure all other tests still pass."""
 
 messages = [
     {"role": "system", "content": SYSTEM},
@@ -138,11 +164,18 @@ total_in = total_out = 0
 compact_in = compact_out = 0
 iteration = 0
 compactions_fired = 0
+plan_writes = 0
 per_iter = []
 
 while iteration < MAX_ITERATIONS:
     iteration += 1
     tools.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
+
+    # Dynamic system prompt: rebuild messages[0] from the stable base plus the
+    # current plan. The plan lives in agent state (planning.CURRENT_PLAN), so
+    # this re-injects it fresh each turn without ever touching message history.
+    messages[0] = {"role": "system", "content": system_with_plan(SYSTEM)}
+
     resp = client.chat.completions.create(
         model=MODEL, messages=messages, tools=TOOL_DEFS,
     )
@@ -174,6 +207,8 @@ while iteration < MAX_ITERATIONS:
             arg_preview = ", ".join(parts)
             print(f"> {tc.function.name}({arg_preview})")
             result = fn(**args)
+            if tc.function.name == "write_plan":
+                plan_writes += 1
         except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
             # Bad tool call (missing args, unknown tool, etc.) — feed the error
             # back to the model so it can self-correct rather than crashing.
