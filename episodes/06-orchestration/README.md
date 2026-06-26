@@ -10,8 +10,10 @@
 
 Roles are enforced by **toolset, not exhortation**: the orchestrator gets no codebase-mutation tools (no `read`/`write`/`edit`/`bash`/`grep`; all work goes through workers), and the `verifier` has no `write`/`edit`. Completion is **verifier-owned**: the orchestrator reaches its natural stop and returns once the verifier confirms a clean test pass (no "done" tool).
 
-**Code:**
-- `agent.py`: the orchestrator + worker runtime: the `delegate` tool, the `.agents/<name>.md` loader, the reentrant `run_agent`, and the parallel dispatcher
+**Code** (structured like Ep 5: the loop, the tools, and each mechanism in its own file):
+- `agent.py` (**this episode's addition**): the orchestrator + worker runtime — the `delegate` tool, the `.agents/<name>.md` loader, the reentrant `run_agent`, and the parallel dispatcher
+- `skills.py`, `planning.py`: carried forward from Ep 5, but adapted so their state is **per-call** (each worker owns its own plan + loaded skills via closures) instead of module-global — so concurrent workers never share state
+- `tools.py`, `compaction.py`: carried forward from Ep 5
 - `initial/.agents/`: the worker configs:
   - `implementer.md`: full toolset, `verification` skill preloaded
   - `verifier.md`: read/test tools only (no `write`/`edit`)

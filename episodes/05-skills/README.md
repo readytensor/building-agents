@@ -11,8 +11,10 @@
 
 Completion is unchanged from earlier episodes: the **natural stop** (the loop ends when the model stops calling tools). Rigorous, test-based completion is available as the `verification` skill (run the tests before finishing); there is no separate "done" tool.
 
-**Code:**
-- `agent.py`: the agent loop + the skills system (`list_skills`, `load_skill`, the `SKILL.md` parser, loaded-skill state, and the skill-provided tools registry)
+**Code** (structured like Ep 4: the loop, the tools, and each mechanism in its own file):
+- `agent.py`: the agent loop; differs from Ep 4 only where the skills system plugs in (the skills import, merging skill-provided tools into the toolset each iteration, and extending the dynamic system prompt with loaded-skill bodies)
+- `skills.py` (**this episode's addition**): `list_skills`, `load_skill`, the `SKILL.md` parser, loaded-skill state, the skill-provided tools (`web_search`, `fetch_url`, `lint`, `coverage`), and the system-prompt injection
+- `tools.py`, `compaction.py`, `planning.py`: carried forward from Ep 4 unchanged
 - `initial/.skills/`: the skill library shipped to the agent:
   - `research/SKILL.md`: web research (`web_search` + `fetch_url`)
   - `verification/SKILL.md`: verify-before-finishing discipline (runs the tests / lint + coverage)

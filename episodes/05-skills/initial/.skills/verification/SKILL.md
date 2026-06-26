@@ -1,14 +1,14 @@
 ---
 name: verification
-description: Use before claiming work is complete. Provides discipline and tools to verify thoroughly against every acceptance criterion — tests, lints, scope — and to call done() correctly when (and only when) criteria pass.
+description: Use before claiming work is complete. Provides discipline and tools to verify thoroughly against every acceptance criterion — tests, lints, scope — and to stop only when (and only when) every criterion passes.
 tools: [lint, coverage]
 ---
 
 # Verification
 
-Before you call `done()`: prove the work is correct against EVERY
-acceptance criterion in the task, not just the obvious one. Most tasks
-have more than one criterion ("tests pass" is usually the easy one).
+Before you treat the task as complete: prove the work is correct against
+EVERY acceptance criterion in the task, not just the obvious one. Most
+tasks have more than one criterion ("tests pass" is usually the easy one).
 
 ## The verification checklist
 
@@ -25,7 +25,7 @@ have more than one criterion ("tests pass" is usually the easy one).
 6. **Tie evidence to criteria:** for each criterion, point to the
    evidence that satisfies it. Use `think()` to write this out as a
    short list. Skipping this step is how silent regressions ship.
-7. **Only then:** call `done(summary)`.
+7. **Only then:** stop calling tools and write a clear final summary.
 
 ## Evidence-before-assertion
 
@@ -34,28 +34,28 @@ session. Never claim "lint clean" without having run `lint()`. Never
 claim "done" without having ticked every criterion. **Your word for it
 is not evidence.**
 
-## `done()` is the only clean exit
+## Stopping IS the completion signal — so stop deliberately
 
-A free-text "I've finished the implementation" without calling `done()`
-leaves the agent loop with no signal — the run ends via naive stop and
-the trajectory looks unfinished in any post-hoc review. Eps 3 and 4
-both ended this way in recorded runs. **This skill exists to prevent
-that failure mode.**
+The run ends the moment you produce a turn with no tool calls. That
+final, tool-free summary is the only completion signal there is — there
+is no separate "done" button to press, and no second pass after it. So
+treat the decision to stop as the decision to ship: do not stop until
+every criterion above is verified. Stopping early with unverified work
+is exactly the failure this skill exists to prevent.
 
-If all criteria check out: call `done(summary)`. The summary should
-list what was done, what was verified, and any caveats or known
-limitations.
+When all criteria check out, stop and write a summary that lists what
+was done, what was verified (with the evidence), and any caveats or
+known limitations.
 
-If even one criterion fails: do NOT call done. Debug, fix, re-verify
+If even one criterion fails: do NOT stop. Debug, fix, and re-verify
 from step 1.
 
 ## Counter-patterns
 
-- Calling done() because the FIRST test passed without running the
-  full suite.
-- Calling done() because "I think it's right" without running anything.
+- Stopping because the FIRST test passed without running the full suite.
+- Stopping because "I think it's right" without running anything.
 - Skipping a criterion because it "looks obvious" (every silent
   regression starts here).
-- Declaring completion in free text instead of via the done() tool.
+- Declaring completion without having actually run the checks.
 - Treating verification as ceremony — racing through the checklist
   without actually reading the output of each step.
