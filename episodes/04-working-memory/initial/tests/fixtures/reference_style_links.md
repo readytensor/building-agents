@@ -4,7 +4,7 @@ Here is [another link][example] using the same reference.
 
 And one [more][different] using a different reference.
 
-The references themselves don't appear in the rendered output.
+The references themselves do not appear in the rendered output.
 
 [example]: https://example.com "Example site"
 [different]: https://example.org/foo

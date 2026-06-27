@@ -51,19 +51,21 @@ def system_with_plan(base_system: str) -> str:
         return base_system
     return (
         f"{base_system}\n\n"
-        f"[CURRENT PLAN]\n{format_plan(CURRENT_PLAN)}\n[end plan]"
+        f"[CURRENT PLAN]\n{format_plan(CURRENT_PLAN)}\n"
+        "Keep this plan current — if it's stale, call write_plan before your "
+        "next major action or before stopping.\n[end plan]"
     )
 
 
 @tool(
     "Set or update your working plan for a MULTI-STEP TASK. Pass the FULL "
-    "current state of the plan as a list of steps. Each step can be either "
-    "(a) a string describing the step, or (b) a dict with 'content' (string) "
-    "and 'status' (one of 'pending', 'in_progress', 'completed'). Call this "
-    "at the start of a task with multiple distinct subtasks, and again "
-    "whenever you complete a step or revise your approach. The plan is always "
-    "visible to you in subsequent iterations, and it persists in agent state, "
-    "so it survives compaction untouched."
+    "current state of the plan as a list of steps — each a string, or a dict "
+    "with 'content' and 'status' ('pending' | 'in_progress' | 'completed'). "
+    "Use it at the start of a task with several distinct subtasks to lay out "
+    "the steps, and call it again as you go to keep the statuses current — "
+    "marking a step 'in_progress' when you start it and 'completed' when it's "
+    "done. The plan stays visible to you every turn and lives in agent state, "
+    "so it survives compaction."
 )
 def write_plan(steps) -> str:
     # Defensive: schema typing for list-of-X isn't tight, so the model sometimes
