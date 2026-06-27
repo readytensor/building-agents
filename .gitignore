@@ -5,9 +5,11 @@ tmp/
 # during series planning only.
 README-INTERNAL.md
 
-# Internal Claude Code config + operational guidance — kept locally, not shipped.
+# Coding agents 
 .claude/
 CLAUDE.md
+Codex.md
+
 
 # (Internal build/design specs now live under tmp/spec/ — covered by the tmp/ rule above.)
 
