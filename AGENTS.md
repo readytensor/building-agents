@@ -16,6 +16,7 @@ building-agents/
 │   │   ├── initial/      # pristine starting copy of the md2html project
 │   │   └── sandbox/      # where the agent works (recreated every run)
 │   ├── 02-tools/  03-compaction/  04-working-memory/  05-skills/  06-subagents/
+├── examples/             # the FINISHED md2html (every feature) + a sample doc that uses them all
 ├── run.py                # optional harness to record a run
 ├── capture.py            # terminal recorder used by run.py --capture
 └── requirements.txt

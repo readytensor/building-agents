@@ -62,6 +62,9 @@ building-agents/
 │   ├── 04-working-memory/
 │   ├── 05-skills/
 │   └── 06-subagents/
+├── examples/
+│   ├── md2html/             # the FINISHED tool (every feature) you build up to
+│   └── about-the-series.md  # a sample document that exercises every feature
 ├── run.py               # optional harness to record a run (see below)
 ├── capture.py           # terminal recorder used by run.py --capture
 ├── requirements.txt
@@ -96,6 +99,15 @@ Each run gets its own timestamped folder under the episode's `logs/`, so you can
 ## The example project: `md2html`
 
 Every episode points the agent at the same small codebase, `md2html`, a Markdown-to-HTML CLI with real module boundaries (lexer → parser → renderer → extensions → CLI) and a pytest suite. Small enough to follow, structured enough that each episode's task lands on a real seam, and the tests let the agent verify its own work instead of just claiming success.
+
+The **finished** version of that tool, with every feature the agent builds across the series (strikethrough, task lists, autolinks, reference links, GitHub alerts, and the rest), lives in [`examples/md2html/`](./examples/md2html/). It's a complete, self-contained project (`pytest` is green). Try it on the sample document, which uses every feature:
+
+```bash
+cd examples/md2html
+python -m md2html ../about-the-series.md --standalone   # writes examples/about-the-series.html, then open it in a browser
+```
+
+With no `-o`, the HTML is written next to the source file (`examples/about-the-series.html`). `--standalone` wraps the output in a full HTML page with a built-in stylesheet; without it, `md2html` emits just the body fragment, the usual contract for a Markdown converter.
 
 ## Provider portability
 
