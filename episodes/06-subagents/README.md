@@ -14,7 +14,7 @@ Roles are enforced by **toolset, not exhortation**: the orchestrator gets no cod
 - `agent.py` (**this episode's addition**): the orchestrator + worker runtime — the `delegate` tool, the `.agents/<name>.md` loader, the reentrant `run_agent`, and the parallel dispatcher
 - `skills.py`, `planning.py`: carried forward from Ep 5, but adapted so their state is **per-call** (each worker owns its own plan + loaded skills via closures) instead of module-global — so concurrent workers never share state
 - `tools.py`, `compaction.py`: carried forward from Ep 5
-- `initial/.agents/`: the worker configs:
+- `.agents/`: the worker configs, at the episode root alongside the agent's code (agent infrastructure, not part of the toy codebase, so not inside `initial/` or the sandbox):
   - `implementer.md`: full toolset, `verification` skill preloaded
   - `verifier.md`: read/test tools only (no `write`/`edit`)
 - `.skills/`: `research` and `verification`, carried forward from Ep 5; at the episode root alongside the agent's code (agent infrastructure, not part of the toy codebase, so not inside `initial/`)

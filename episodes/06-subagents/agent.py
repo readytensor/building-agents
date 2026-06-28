@@ -28,7 +28,7 @@ What Ep 6 adds:
 4. .agents/<name>.md worker configs — frontmatter (name, description, tools
    allowlist, skills to pre-load) + body (the worker's system prompt). Parsed
    with the same parser as .skills/<name>/SKILL.md (skills.parse_frontmatter).
-   Two ship in initial/.agents/: implementer + verifier.
+   Two ship in .agents/ (at the episode root): implementer + verifier.
 
 Completion is the natural stop — a worker (or the orchestrator) finishes when
 it produces an assistant turn with no tool calls; run_agent returns that final
@@ -146,7 +146,12 @@ class AgentConfig:
     prompt: str            # system prompt for this agent_type
 
 
-_AGENTS_DIR = SANDBOX / ".agents"
+# Worker configs live at the episode root (alongside agent.py / skills.py), NOT
+# inside initial/ or the sandbox: they're agent infrastructure, not part of the
+# toy codebase the workers edit. Keeping them out of SANDBOX also means a task
+# that operates over the workspace (grep, list_files, git diff) never sweeps the
+# agent's own configs into the task content.
+_AGENTS_DIR = Path(".agents")
 
 
 def _load_agent_configs() -> dict:
