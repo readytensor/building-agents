@@ -34,8 +34,8 @@ _ENC = get_encoding("cl100k_base")
 
 # --- Compaction knobs. Env-overridable; defaults shown below. Both are used in
 # compact(): the threshold gates on the middle's token count, KEEP sets the tail.
-COMPACTION_THRESHOLD = int(os.environ.get("EP3_THRESHOLD", 20_000))  # tokens in the compactable middle before we summarize it.
-KEEP_LAST_ITERATIONS = int(os.environ.get("EP3_KEEP", 2))            # recent assistant rounds preserved uncompacted.
+COMPACTION_THRESHOLD = int(os.environ.get("COMPACTION_THRESHOLD", 20_000))  # tokens in the compactable middle before we summarize it.
+KEEP_LAST_ITERATIONS = int(os.environ.get("KEEP_LAST_ITERATIONS", 2))            # recent assistant rounds preserved uncompacted.
 
 SUMMARIZER_PROMPT = (
     "You're summarizing an in-progress coding-agent transcript so the agent can keep "

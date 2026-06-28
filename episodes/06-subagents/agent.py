@@ -102,8 +102,8 @@ summarizer_client = (
 )
 
 # --- Knobs. (Compaction knobs live in compaction.py.)
-MAX_ITERATIONS = int(os.environ.get("EP6_MAX_ITER", 200))          # orchestrator cap
-MAX_WORKER_ITER = int(os.environ.get("EP6_MAX_WORKER_ITER", 60))   # per-worker cap
+MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 200))          # orchestrator cap
+MAX_WORKER_ITER = int(os.environ.get("MAX_WORKER_ITER", 60))   # per-worker cap
 
 # Always-available, stateless file tools, by name. The plan/skills tools are
 # per-call closures (bound in run_agent); delegate is bound only for the

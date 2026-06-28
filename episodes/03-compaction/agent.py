@@ -82,7 +82,7 @@ summarizer_client = (
 
 # --- Loop safety cap to prevent an infinite loop. (Compaction knobs live in
 # compaction.py.)
-MAX_ITERATIONS = int(os.environ.get("EP3_MAX_ITER", 150))
+MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 150))
 
 
 # --- 3. Usage telemetry: token counts per run -> metrics.json. The harness

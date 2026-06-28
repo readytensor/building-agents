@@ -85,7 +85,7 @@ summarizer_client = (
 
 # --- Loop safety cap to prevent an infinite loop. (Compaction knobs live in
 # compaction.py.)
-MAX_ITERATIONS = int(os.environ.get("EP4_MAX_ITER", 150))
+MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 150))
 
 # --- 3. Tool registry: Ep 3's six file primitives plus Ep 4's new
 # tool, write_plan. (Tool-call telemetry lives in tools.py.)
