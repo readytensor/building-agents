@@ -25,8 +25,11 @@ planning.system_with_plan appends the plan, and system_with_skills here
 appends each loaded skill's body. Both live in agent state (not message
 history), so they survive compaction and keep the message prefix stable.
 
-Imports one-way from tools (`skills → tools`, for the @tool decorator and
-SANDBOX); agent.py imports from skills, planning, tools, and compaction.
+Imports one-way from tools (`skills → tools`): the @tool decorator, plus
+SANDBOX / _safe_path used by the skill-provided tools (lint, coverage) that run
+inside the sandbox workspace. The skill *files* are not under the sandbox —
+they live at .skills/ in the episode root, found via Path(".skills"). agent.py
+imports from skills, planning, tools, and compaction.
 
 See ../../README.md for context.
 """
@@ -41,9 +44,13 @@ from urllib.parse import unquote, urlparse, parse_qs
 
 from tools import SANDBOX, _safe_path, tool
 
-# Where skills live. agent.py resets the sandbox to a clean copy of initial/
-# (which ships the .skills/ directory) before the run starts.
-_SKILLS_DIR = SANDBOX / ".skills"
+# Where skills live: a .skills/ directory at the episode root, alongside
+# agent.py / skills.py. Skills are agent infrastructure, not part of the toy
+# codebase — so they sit next to the agent's modules, NOT inside initial/ (the
+# pristine md2html template) and NOT inside the sandbox the agent edits. A
+# consequence: the agent reaches skills only through list_skills / load_skill,
+# never through its sandbox-bound file tools (read/grep/bash can't see them).
+_SKILLS_DIR = Path(".skills")
 
 # A skill, once loaded, contributes two things for the rest of the run: its
 # body (into the system prompt) and its tools (into the live registry). Both
@@ -122,9 +129,13 @@ def load_skill(name: str) -> str:
         if tool_name in _SKILL_TOOLS_REGISTRY:
             LOADED_TOOLS[tool_name] = _SKILL_TOOLS_REGISTRY[tool_name]
             new_tools.append(tool_name)
+    # Return only a confirmation — NOT the body. The body is injected into the
+    # system prompt by system_with_skills() (rebuilt every turn), so returning
+    # it here too would put the same text in context twice: once in this tool
+    # result (which lingers in message history) and once in the system prompt.
     return (
-        f"Skill '{name}' loaded. Tools registered: {new_tools or 'none'}.\n\n"
-        f"=== {name.upper()} ===\n{skill['body']}"
+        f"Skill '{name}' loaded. Tools registered: {new_tools or 'none'}. "
+        f"Its instructions are now part of your system prompt."
     )
 
 

@@ -17,7 +17,7 @@ Roles are enforced by **toolset, not exhortation**: the orchestrator gets no cod
 - `initial/.agents/`: the worker configs:
   - `implementer.md`: full toolset, `verification` skill preloaded
   - `verifier.md`: read/test tools only (no `write`/`edit`)
-- `initial/.skills/`: `research` and `verification`, carried forward from Ep 5
+- `.skills/`: `research` and `verification`, carried forward from Ep 5; at the episode root alongside the agent's code (agent infrastructure, not part of the toy codebase, so not inside `initial/`)
 - `initial/`: `md2html` with three independent test fixtures (one per feature below); each fails until its feature is implemented
 - `sandbox/`: gitignored, recreated on every run
 

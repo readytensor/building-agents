@@ -15,7 +15,10 @@ parse_frontmatter is the same tiny `---`-delimited parser Ep 5 used for
 SKILL.md; Ep 6 reuses it for the .agents/<name>.md worker configs too (see
 agent.py), which is why it lives here as a shared helper.
 
-Imports one-way from tools (`skills → tools`, for @tool / SANDBOX / _safe_path).
+Imports one-way from tools (`skills → tools`): the @tool decorator, plus
+SANDBOX / _safe_path used by the skill-provided tools (lint, coverage) that run
+inside the sandbox workspace. The skill files themselves are not under the
+sandbox — they live at .skills/ in the episode root, found via Path(".skills").
 
 See ../../README.md for context.
 """
@@ -30,7 +33,10 @@ from urllib.parse import unquote, urlparse, parse_qs
 
 from tools import SANDBOX, _safe_path, tool
 
-_SKILLS_DIR = SANDBOX / ".skills"
+# Skills live at the episode root, alongside agent.py / skills.py — agent
+# infrastructure, not part of the toy codebase, so NOT inside initial/ or the
+# sandbox. The agent reaches them only via list_skills / load_skill.
+_SKILLS_DIR = Path(".skills")
 
 
 def parse_frontmatter(path: Path) -> tuple[dict, str]:
@@ -132,9 +138,14 @@ def make_load_skill_tool(loaded: dict, tools_by_name: dict):
             if tool_name in _SKILL_TOOLS_REGISTRY:
                 tools_by_name[tool_name] = _SKILL_TOOLS_REGISTRY[tool_name]
                 new_tools.append(tool_name)
+        # Return only a confirmation — NOT the body. The body is injected into
+        # the system prompt by system_with_skills() (rebuilt every turn), so
+        # returning it here too would put the same text in context twice: once
+        # in this tool result (which lingers in message history) and once in
+        # the system prompt.
         return (
-            f"Skill '{name}' loaded. Tools registered: {new_tools or 'none'}.\n\n"
-            f"=== {name.upper()} ===\n{skill['body']}"
+            f"Skill '{name}' loaded. Tools registered: {new_tools or 'none'}. "
+            f"Its instructions are now part of your system prompt."
         )
     return load_skill
 

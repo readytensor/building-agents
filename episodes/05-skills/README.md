@@ -15,7 +15,7 @@ Completion is unchanged from earlier episodes: the **natural stop** (the loop en
 - `agent.py`: the agent loop; differs from Ep 4 only where the skills system plugs in (the skills import, merging skill-provided tools into the toolset each iteration, and extending the dynamic system prompt with loaded-skill bodies)
 - `skills.py` (**this episode's addition**): `list_skills`, `load_skill`, the `SKILL.md` parser, loaded-skill state, the skill-provided tools (`web_search`, `fetch_url`, `lint`, `coverage`), and the system-prompt injection
 - `tools.py`, `compaction.py`, `planning.py`: carried forward from Ep 4 unchanged
-- `initial/.skills/`: the skill library shipped to the agent:
+- `.skills/`: the skill library, at the episode root alongside the agent's code (it is agent infrastructure, not part of the toy codebase, so it lives next to `agent.py`/`skills.py`, not inside `initial/` or the sandbox):
   - `research/SKILL.md`: web research (`web_search` + `fetch_url`)
   - `verification/SKILL.md`: verify-before-finishing discipline (runs the tests / lint + coverage)
 - `initial/`: `md2html` (the toy codebase) with a test fixture for GitHub-flavored alerts; the fixture fails until the feature is implemented
