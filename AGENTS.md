@@ -28,6 +28,8 @@ Each episode is **self-contained**: `cd` into it and run `python agent.py`. Epis
 diff episodes/01-loop/agent.py episodes/02-tools/agent.py   # what one idea added
 ```
 
+`agent.py` is always the entry point. The early episodes are a single file; as the agent grows, later episodes split the supporting pieces into a few small modules next to it (`tools.py`, `compaction.py`, `planning.py`, `skills.py`), so `agent.py` stays focused on the loop.
+
 ## Ground rules when working here
 
 - **Never modify `initial/`.** It is the pristine template the agent starts from. Every `agent.py` begins by wiping `sandbox/` and copying `initial/` into it, so each run starts from an identical clean state. If you change `initial/`, you change the experiment.
