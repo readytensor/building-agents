@@ -59,6 +59,7 @@ def api_key_for(base_url: str):
     OpenRouter, …) falls through to OPENAI_API_KEY."""
     by_provider = {
         "anthropic": "ANTHROPIC_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
         "groq": "GROQ_API_KEY",
         "googleapis": "GOOGLE_API_KEY",
         "manus": "MANUS_API_KEY",
@@ -150,11 +151,13 @@ the document, and inline `[text][id]` references resolve to <a> elements
 using those URLs. The definition lines themselves should NOT appear in
 the rendered output.
 
-I've added a test fixture at tests/fixtures/reference_style_links.md and
-tests/fixtures/reference_style_links.html showing the expected behavior.
-Right now pytest fails on it because the feature isn't implemented.
+This touches a few parts of the pipeline, so plan the work first and
+track your progress against it as you go.
 
-Can you add reference-style links? Make sure all other tests still pass."""
+I've added a test fixture at tests/fixtures/reference_style_links.md and
+tests/fixtures/reference_style_links.html showing the expected behavior;
+it currently fails. Make it pass, and make sure the existing tests still
+pass too."""
 
 messages = [
     {"role": "system", "content": SYSTEM},
