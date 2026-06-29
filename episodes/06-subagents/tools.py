@@ -23,6 +23,7 @@ See ../../README.md for context.
 """
 import inspect
 import json
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -88,13 +89,57 @@ def _safe_path(path: str) -> Path:
 
 @tool("Execute a shell command in the working directory and return its output.")
 def bash(command: str) -> str:
-    result = subprocess.run(  # noqa: S602  # nosec
-        command, shell=True, capture_output=True, text=True,
-        cwd=SANDBOX, timeout=30,
-        encoding="utf-8", errors="replace",
-        check=False,
+    # cwd=SANDBOX sets the starting directory for convenience and
+    # reproducibility. It is NOT a security boundary: with shell=True the
+    # command can cd elsewhere, use absolute paths, or read and write anything
+    # this process can. Actually containing a real shell needs OS-level
+    # isolation (a container, or a sandbox like macOS Seatbelt / Linux
+    # bubblewrap, the way real agents such as Claude Code do it), which is out
+    # of scope for this toy. So run it against code you trust, on a machine you
+    # don't mind it touching. check=False: non-zero exits return as output so
+    # the model can adapt.
+    proc = subprocess.Popen(  # noqa: S602  # nosec
+        command, shell=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        cwd=SANDBOX, encoding="utf-8", errors="replace",
+        start_new_session=(os.name != "nt"),  # POSIX: own group so we can kill the whole tree
     )
-    return (result.stdout + result.stderr).strip() or "(no output)"
+    try:
+        output = proc.communicate(timeout=30)[0]
+    except subprocess.TimeoutExpired:
+        # Kill the WHOLE process tree, not just the shell. With shell=True the
+        # real command runs as a grandchild of the shell; killing only the shell
+        # leaves the grandchild alive, still holding the output pipe — which
+        # deadlocks the drain (an unbounded loop would then hang forever).
+        # taskkill /T (Windows) and killpg (POSIX) take the descendants down too.
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, check=False)
+        else:
+            import signal
+            killpg = getattr(os, "killpg", None)      # POSIX-only; absent on Windows,
+            getpgid = getattr(os, "getpgid", None)    # so this branch never runs there
+            if killpg and getpgid:
+                try:
+                    killpg(getpgid(proc.pid), getattr(signal, "SIGKILL", 9))
+                except ProcessLookupError:
+                    pass
+        if proc.poll() is None:   # if the tree-kill missed, at least kill the shell
+            proc.kill()
+        try:
+            proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        return (
+            "Error: command timed out after 30s and was killed (whole process "
+            "tree). Avoid long-running or interactive commands, watch for code "
+            "that can loop forever, and scope file searches to the working directory."
+        )
+    output = (output or "").strip()
+    if len(output) > 20_000:                 # cap transcript growth from chatty commands
+        output = output[:20_000] + "\n...[truncated]"
+    if proc.returncode:                      # surface failures so the model can adapt
+        output += f"\n(exit code {proc.returncode})"
+    return output or "(no output)"
 
 
 @tool("List files under a path (recursive), one relative path per line — a reliable cross-platform alternative to shell find/ls/dir. Skips caches and VCS dirs.")

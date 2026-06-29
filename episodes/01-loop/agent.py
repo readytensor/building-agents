@@ -39,6 +39,7 @@ def api_key_for(base_url: str):
     OpenRouter, …) falls through to OPENAI_API_KEY."""
     by_provider = {
         "anthropic": "ANTHROPIC_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
         "groq": "GROQ_API_KEY",
         "googleapis": "GOOGLE_API_KEY",
         "manus": "MANUS_API_KEY",
@@ -55,24 +56,64 @@ client = OpenAI(api_key=api_key_for(BASE_URL), base_url=BASE_URL or None)
 
 # --- 3. The one tool: bash, bounded to the sandbox directory.
 def bash(command: str) -> str:
-    """Execute a shell command inside the sandbox and return its output.
+    """Execute a shell command in the working directory and return its output.
 
     check=False is deliberate: command failures (non-zero exit) come back to
-    the LLM as tool output so the model can adapt — e.g., 'ls' fails on
+    the LLM as tool output so the model can adapt. For example 'ls' fails on
     Windows cmd, the LLM sees the error and pivots to 'dir'. Crashing the
     agent on non-zero exit would defeat that.
 
-    shell=True is also deliberate — this IS the bash tool. The security
-    model is the sandbox boundary (cwd bounded to a fresh copy of initial/),
-    not the subprocess argument shape.
+    IMPORTANT: cwd is NOT a security boundary. shell=True gives the model a
+    real shell, so cwd=SANDBOX only sets the *starting* directory: the command
+    can cd elsewhere, use absolute paths, or read and write anything this
+    process can. The fresh copy of initial/ is for convenience and
+    reproducibility, not safety. Actually containing a shell tool needs
+    OS-level isolation (a container, or a sandbox like macOS Seatbelt / Linux
+    bubblewrap, the way real agents such as Claude Code do it), which is out of
+    scope for this toy. So run this against code you trust, on a machine you
+    don't mind it touching, or inside a throwaway VM/container.
     """
-    result = subprocess.run(
-        command, shell=True, capture_output=True, text=True,
-        cwd=SANDBOX, timeout=30,
-        encoding="utf-8", errors="replace",
-        check=False,
+    proc = subprocess.Popen(
+        command, shell=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        cwd=SANDBOX, encoding="utf-8", errors="replace",
+        start_new_session=(os.name != "nt"),  # POSIX: own group so we can kill the whole tree
     )
-    output = (result.stdout + result.stderr).strip()
+    try:
+        output = proc.communicate(timeout=30)[0]
+    except subprocess.TimeoutExpired:
+        # Kill the WHOLE process tree, not just the shell. With shell=True the
+        # real command runs as a grandchild of the shell; killing only the shell
+        # leaves the grandchild alive, still holding the output pipe — which
+        # deadlocks the drain (an unbounded loop would then hang forever).
+        # taskkill /T (Windows) and killpg (POSIX) take the descendants down too.
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, check=False)
+        else:
+            import signal
+            killpg = getattr(os, "killpg", None)      # POSIX-only; absent on Windows,
+            getpgid = getattr(os, "getpgid", None)    # so this branch never runs there
+            if killpg and getpgid:
+                try:
+                    killpg(getpgid(proc.pid), getattr(signal, "SIGKILL", 9))
+                except ProcessLookupError:
+                    pass
+        if proc.poll() is None:   # if the tree-kill missed, at least kill the shell
+            proc.kill()
+        try:
+            proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            pass
+        return (
+            "Error: command timed out after 30s and was killed (whole process "
+            "tree). Avoid long-running or interactive commands, watch for code "
+            "that can loop forever, and scope file searches to the working directory."
+        )
+    output = (output or "").strip()
+    if len(output) > 20_000:                 # cap transcript growth from chatty commands
+        output = output[:20_000] + "\n...[truncated]"
+    if proc.returncode:                      # surface failures so the model can adapt
+        output += f"\n(exit code {proc.returncode})"
     return output or "(no output)"
 
 BASH_TOOL = {
