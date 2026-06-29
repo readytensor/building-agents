@@ -56,6 +56,7 @@ def api_key_for(base_url: str):
     OpenRouter, …) falls through to OPENAI_API_KEY."""
     by_provider = {
         "anthropic": "ANTHROPIC_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
         "groq": "GROQ_API_KEY",
         "googleapis": "GOOGLE_API_KEY",
         "manus": "MANUS_API_KEY",

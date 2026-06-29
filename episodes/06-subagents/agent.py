@@ -80,6 +80,7 @@ def api_key_for(base_url: str):
     environment — switch providers by changing only LLM_BASE_URL."""
     by_provider = {
         "anthropic": "ANTHROPIC_API_KEY",
+        "openrouter": "OPENROUTER_API_KEY",
         "groq": "GROQ_API_KEY",
         "googleapis": "GOOGLE_API_KEY",
         "manus": "MANUS_API_KEY",
