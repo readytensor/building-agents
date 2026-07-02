@@ -22,6 +22,8 @@ def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path, run_label:
     inst_dir = batch_dir / run_label
     inst_dir.mkdir(parents=True, exist_ok=True)
 
+    if instance.prepare is not None:
+        instance.prepare()  # e.g. clone the repo at its base commit (cached)
     work = materialize(instance.repo_dir, inst_dir / "repo")
     scored = replace(instance, repo_dir=work)  # verify() must score the working copy
 

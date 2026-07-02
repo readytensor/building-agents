@@ -67,3 +67,5 @@ eval/results/
 .vscode/
 .idea/
 *.swp
+# SWE-bench lazy repo clones (cached checkouts, fetched on demand)
+eval/cache/
