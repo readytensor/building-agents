@@ -137,8 +137,11 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
         tool_defs = [fn.tool_definition for fn in by_name.values()]
 
         resp = client.chat.completions.create(model=MODEL, messages=messages, tools=tool_defs)
-        total_in += resp.usage.prompt_tokens
-        total_out += resp.usage.completion_tokens
+        # Some providers (notably OpenRouter's free tiers) omit usage on some
+        # responses; count what's reported rather than crashing the run.
+        if resp.usage is not None:
+            total_in += resp.usage.prompt_tokens
+            total_out += resp.usage.completion_tokens
         msg = resp.choices[0].message
         messages.append(msg.model_dump(exclude_none=True))
         if not msg.tool_calls:
