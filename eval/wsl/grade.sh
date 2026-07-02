@@ -32,7 +32,7 @@ fi
   --predictions_path "$PREDICTIONS" \
   --run_id "$RUN_ID" \
   --max_workers 1 \
-  --cache_level env \
+  --cache_level instance \
   $IDS
 
 # Copy each instance's report.json back to the caller's out_dir, named by
