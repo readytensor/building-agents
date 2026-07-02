@@ -20,6 +20,7 @@ fully tested offline; only the thin bridge needs the real environment.
 """
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -84,6 +85,18 @@ def env_corrected(agent: dict, gold: dict) -> bool:
     return agent["f2p_ok"] and set(agent["p2p_failures"]) <= set(gold["p2p_failures"])
 
 
+def _official_verdict(agent: dict, gold: dict) -> dict:
+    """The official.json payload for one graded attempt."""
+    return {
+        "resolved": env_corrected(agent, gold),  # env-corrected, the number that counts
+        "resolved_raw": agent["resolved_raw"],   # the grader's uncorrected verdict
+        "f2p_ok": agent["f2p_ok"],
+        "p2p_failures": agent["p2p_failures"],
+        "gold_baseline_failures": gold["p2p_failures"],
+        "beyond_gold": sorted(set(agent["p2p_failures"]) - set(gold["p2p_failures"])),
+    }
+
+
 def _gold_baselines(instance_ids: list, run_id: str, runner) -> dict:
     """Load cached gold baselines; grade the gold patch for any missing ones."""
     GOLD_BASELINE_DIR.mkdir(parents=True, exist_ok=True)
@@ -104,6 +117,31 @@ def _gold_baselines(instance_ids: list, run_id: str, runner) -> dict:
     return baselines
 
 
+def grade_instance(inst_dir, model_name: str, run_id: str = None, runner=run_grader) -> dict:
+    """Officially grade ONE finished attempt (inst_dir holds its diff.patch).
+
+    This is the solve -> grade -> next-sample path (run_eval --grade): a broken
+    setup surfaces after the first sample instead of after a costly full batch.
+    Writes official.json into inst_dir and returns it."""
+    inst_dir = Path(inst_dir)
+    # Repeat attempts get "-runN" dir suffixes; the grader keys on the real id.
+    iid = re.sub(r"-run\d+$", "", inst_dir.name)
+    run_id = run_id or f"{inst_dir.parent.name}-{inst_dir.name}".replace(".", "-")
+
+    pred = {"instance_id": iid, "model_name_or_path": model_name,
+            "model_patch": (inst_dir / "diff.patch").read_text(encoding="utf-8")}
+    predictions = inst_dir / "predictions.jsonl"
+    predictions.write_text(json.dumps(pred) + "\n", encoding="utf-8")
+
+    gold = _gold_baselines([iid], run_id, runner)
+    reports_dir = inst_dir / "official_reports"
+    runner(str(predictions), run_id, reports_dir, [iid])
+
+    verdict = _official_verdict(parse_report(reports_dir / f"{iid}.json", iid), gold[iid])
+    (inst_dir / "official.json").write_text(json.dumps(verdict, indent=2), encoding="utf-8")
+    return verdict
+
+
 def grade_batch(batch_dir, model_name: str, run_id: str = None, runner=run_grader) -> dict:
     batch_dir = Path(batch_dir)
     run_id = run_id or batch_dir.name.replace(".", "-")
@@ -120,19 +158,10 @@ def grade_batch(batch_dir, model_name: str, run_id: str = None, runner=run_grade
 
     resolved, unresolved = [], []
     for iid in ids:
-        agent = parse_report(reports_dir / f"{iid}.json", iid)
-        ok = env_corrected(agent, gold[iid])
-        (resolved if ok else unresolved).append(iid)
-        official_json = {
-            "resolved": ok,                      # env-corrected, the number that counts
-            "resolved_raw": agent["resolved_raw"],  # the grader's uncorrected verdict
-            "f2p_ok": agent["f2p_ok"],
-            "p2p_failures": agent["p2p_failures"],
-            "gold_baseline_failures": gold[iid]["p2p_failures"],
-            "beyond_gold": sorted(set(agent["p2p_failures"]) - set(gold[iid]["p2p_failures"])),
-        }
+        verdict = _official_verdict(parse_report(reports_dir / f"{iid}.json", iid), gold[iid])
+        (resolved if verdict["resolved"] else unresolved).append(iid)
         (batch_dir / iid / "official.json").write_text(
-            json.dumps(official_json, indent=2), encoding="utf-8")
+            json.dumps(verdict, indent=2), encoding="utf-8")
 
     summary = {
         "run_id": run_id, "model": model_name,

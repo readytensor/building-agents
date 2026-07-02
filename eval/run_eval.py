@@ -3,6 +3,7 @@
     python -m eval.run_eval --source local --n 5 --repeat 3
     python -m eval.run_eval --source local --id md2html__alerts
     python -m eval.run_eval --source local --agent fake-fixing --n 1   # token-free smoke
+    python -m eval.run_eval --source swebench --n 5 --grade   # solve -> grade -> next
 
 The agent-under-test is selectable: `--agent ep5` (default, the real reference
 agent) or a fake adapter for token-free testing. Providers supply instances;
@@ -50,6 +51,21 @@ def _select_agent(name):
     raise SystemExit(f"unknown agent: {name}")
 
 
+def _grade_now(inst_dir, model_label):
+    """--grade path: officially grade one just-finished sample. A grading
+    failure is reported and recorded as None, not fatal — the remaining
+    samples still run, and the sample can be re-graded later via eval.official."""
+    from eval.official import grade_instance  # lazy: needs WSL + Docker only here
+    try:
+        verdict = grade_instance(inst_dir, model_label)
+    except Exception as e:
+        print(f"[eval] {inst_dir.name}: grading failed: {e}", flush=True)
+        return None
+    state = "RESOLVED" if verdict["resolved"] else "unresolved"
+    print(f"[eval] {inst_dir.name}: official verdict {state}", flush=True)
+    return verdict["resolved"]
+
+
 def _agent_git_sha():
     try:
         return subprocess.run(
@@ -71,12 +87,18 @@ def main(argv=None):
                    help="filter by Verified's time-to-fix bucket before sampling")
     p.add_argument("--repo", default=None, help="filter by repo substring, e.g. flask")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--grade", action="store_true",
+                   help="officially grade each sample right after it runs (solve -> "
+                        "grade -> next sample), so a broken setup surfaces after the "
+                        "first sample, not after the whole batch. swebench only.")
     p.add_argument("--keep", choices=["none", "failures", "all"], default="failures")
     p.add_argument("--results-root", default="eval/results")
     p.add_argument("--timestamp", default=None, help="override batch id (tests use this)")
     args = p.parse_args(argv)
 
     solve, agent_label, model_label = _select_agent(args.agent)
+    if args.grade and args.source != "swebench":
+        raise SystemExit("--grade needs --source swebench (official grading only exists there)")
     instances = filter_pool(_load_instances(args.source),
                             difficulty=args.difficulty, repo=args.repo)
     picked = sample(instances, n=args.n, seed=args.seed, instance_id=args.instance_id)
@@ -93,8 +115,15 @@ def main(argv=None):
         for k in range(args.repeat):
             label = inst.id if k == 0 else f"{inst.id}-run{k + 1}"
             print(f"[eval] {label}", flush=True)
-            results.append(run_instance(inst, solve, batch_dir, run_label=label))
+            result = run_instance(inst, solve, batch_dir, run_label=label)
+            if args.grade:
+                result["official_resolved"] = _grade_now(batch_dir / label, model_label)
+            results.append(result)
 
+    # With --grade the official verdicts are the numbers of record; without it,
+    # swebench rows stay explicitly ungraded (local pytest is env-noise there).
+    if args.grade:
+        results = [dict(r, passed=bool(r.get("official_resolved"))) for r in results]
     agg = aggregate(results, repeat=args.repeat)
     write_summary(batch_dir, agg, results)
     write_manifest(batch_dir, {
@@ -107,8 +136,9 @@ def main(argv=None):
         "timestamp": stamp, "agent": agent_label, "model": model_label, "source": args.source,
         "n": len(picked), "repeat": args.repeat, "seed": args.seed,
         # Local pytest is only meaningful for the local provider; swebench rows
-        # are ungraded until eval.official adds the official row.
-        "grading": "local-pytest" if args.source == "local" else "ungraded",
+        # are ungraded unless --grade ran official grading per sample.
+        "grading": ("official-env-corrected" if args.grade
+                    else "local-pytest" if args.source == "local" else "ungraded"),
         "pass_at_1": agg["pass_at_1"], "pass_at_k": agg["pass_at_k"],
         "mean_seconds": agg["mean_seconds"], "batch_dir": str(batch_dir),
     })

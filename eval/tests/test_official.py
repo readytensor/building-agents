@@ -47,6 +47,48 @@ def test_write_predictions_uses_first_attempt_only(tmp_path):
     assert all(p["model_name_or_path"] == "test-model" for p in preds)
 
 
+def test_grade_instance_grades_one_sample(tmp_path, monkeypatch):
+    monkeypatch.setattr(official, "GOLD_BASELINE_DIR", tmp_path / "gold_cache")
+    inst = tmp_path / "batch" / "inst-1"
+    inst.mkdir(parents=True)
+    (inst / "diff.patch").write_text("diff")
+
+    def fake_runner(predictions, run_id, out_dir, ids):
+        out = Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        for iid in ids:
+            (out / f"{iid}.json").write_text(json.dumps(_report(iid, [], ["flaky1"], False)))
+
+    verdict = official.grade_instance(inst, "test-model", runner=fake_runner)
+    assert verdict["resolved"] is True  # same failures as gold -> env-corrected pass
+    assert json.loads((inst / "official.json").read_text()) == verdict
+    pred = json.loads((inst / "predictions.jsonl").read_text())
+    assert pred["instance_id"] == "inst-1"
+    assert pred["model_name_or_path"] == "test-model"
+
+
+def test_grade_instance_strips_repeat_suffix(tmp_path, monkeypatch):
+    monkeypatch.setattr(official, "GOLD_BASELINE_DIR", tmp_path / "gold_cache")
+    inst = tmp_path / "batch" / "inst-1-run2"
+    inst.mkdir(parents=True)
+    (inst / "diff.patch").write_text("diff")
+
+    graded_ids = []
+
+    def fake_runner(predictions, run_id, out_dir, ids):
+        graded_ids.extend(ids)
+        out = Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        for iid in ids:
+            (out / f"{iid}.json").write_text(json.dumps(_report(iid, [], [], False)))
+
+    official.grade_instance(inst, "test-model", runner=fake_runner)
+    # The grader must see the real instance id, not the attempt label.
+    assert set(graded_ids) == {"inst-1"}
+    pred = json.loads((inst / "predictions.jsonl").read_text())
+    assert pred["instance_id"] == "inst-1"
+
+
 def test_grade_batch_end_to_end_with_fake_runner(tmp_path, monkeypatch):
     monkeypatch.setattr(official, "GOLD_BASELINE_DIR", tmp_path / "gold_cache")
     batch = tmp_path / "batch"

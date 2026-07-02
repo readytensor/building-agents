@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from eval import run_eval
 from eval.tests.conftest import BASE_FILES
 
@@ -38,3 +40,8 @@ def test_cli_fake_agent_end_to_end(tmp_path, monkeypatch):
     assert (results_root / "t0" / "summary.md").exists()
     verdict = json.loads((results_root / "t0" / "md2html__demo" / "verify.json").read_text())
     assert verdict["passed"] is True
+
+
+def test_grade_flag_requires_swebench_source():
+    with pytest.raises(SystemExit, match="--grade needs --source swebench"):
+        run_eval.main(["--source", "local", "--agent", "fake-noop", "--grade"])
