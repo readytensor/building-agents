@@ -53,6 +53,11 @@ class Instance:
     # Provider-specific attributes used for filtering the pool before sampling
     # (e.g. {"difficulty": "<15 min fix", "repo": "pallets/flask"}).
     meta: dict = field(default_factory=dict)
+    # Optional execution-environment hook. Called with the materialized working
+    # copy just before the agent runs; returns a teardown callable. The swebench
+    # provider uses this to start the instance's own Docker container (so the
+    # agent's bash runs in the repo's real environment) and stop it afterwards.
+    env_setup: Optional[Callable[[Path], Callable[[], None]]] = None
 
     def verify(self) -> Verdict:
         return self.scorer(self.repo_dir, self.fail_to_pass, self.pass_to_pass)

@@ -33,8 +33,16 @@ def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path, run_label:
     work = materialize(instance.repo_dir, inst_dir / "repo")
     scored = replace(instance, repo_dir=work)  # verify() must score the working copy
 
+    # If the provider supplies an execution environment (e.g. the instance's
+    # Docker container), stand it up around the agent run and always tear it
+    # down -- even when the agent crashes.
+    teardown = instance.env_setup(work) if instance.env_setup else None
     start = time.monotonic()
-    solve(work, instance.problem_statement)
+    try:
+        solve(work, instance.problem_statement)
+    finally:
+        if teardown:
+            teardown()
     diff = capture_diff(work)
     verdict = scored.verify()
     elapsed = round(time.monotonic() - start, 3)

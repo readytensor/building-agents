@@ -15,6 +15,7 @@ import json
 import subprocess
 from pathlib import Path
 
+from eval import container
 from eval.scoring import score_pytest
 from eval.targets import Instance, Verdict
 
@@ -89,7 +90,15 @@ def to_instance(record: dict, cache_dir: Path = CACHE_DIR) -> Instance:
         scorer=make_local_scorer(record.get("test_patch", "")),
         prepare=lambda: clone_at_commit(url, commit, repo_dir),
         meta={"difficulty": record.get("difficulty", ""), "repo": repo},
+        env_setup=lambda work_dir, iid=record["instance_id"]: _container_env(iid, work_dir),
     )
+
+
+def _container_env(instance_id: str, work_dir: Path):
+    """Start the instance's own container (agent bash runs in the repo's real
+    environment); return the teardown that stops it."""
+    cid = container.start(instance_id, work_dir)
+    return lambda: container.stop(cid)
 
 
 def get_instances() -> list:
