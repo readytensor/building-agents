@@ -87,6 +87,7 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
     total_in = total_out = 0
     compactions = compact_in = compact_out = 0
     tool_call_count = 0
+    mechanism_calls = {"write_plan": 0, "list_skills": 0, "load_skill": 0}
     while iteration < MAX_ITERATIONS:
         iteration += 1
         tools.CURRENT_ROUND = iteration
@@ -103,6 +104,8 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
             break
         tool_call_count += len(msg.tool_calls)
         for tc in msg.tool_calls:
+            if tc.function.name in mechanism_calls:
+                mechanism_calls[tc.function.name] += 1
             try:
                 fn = by_name[tc.function.name]
                 result = fn(**json.loads(tc.function.arguments))
@@ -128,7 +131,12 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
             "compactions": compactions,
             "compact_in": compact_in,
             "compact_out": compact_out,
-            "skills": {"loaded": list(skills.LOADED_SKILLS)},
+            "reasoning": {"write_plan": mechanism_calls["write_plan"]},
+            "skills": {
+                "list_skills": mechanism_calls["list_skills"],
+                "load_skill": mechanism_calls["load_skill"],
+                "loaded": list(skills.LOADED_SKILLS),
+            },
         }],
         "config": {"MODEL": MODEL, "MAX_ITERATIONS": MAX_ITERATIONS},
     }
