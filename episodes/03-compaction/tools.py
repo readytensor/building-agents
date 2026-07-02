@@ -164,16 +164,25 @@ def list_files(path: str = ".") -> str:
     return "\n".join(files) if files else "(no files)"
 
 
-@tool("Read a file's contents, prefixed with line numbers.")
-def read(path: str) -> str:
+@tool("Read a file's contents, prefixed with line numbers. For large files, pass offset (1-based line to start at) and limit (max lines) to read just a slice instead of the whole file.")
+def read(path: str, offset: int = 1, limit: int = 0) -> str:
     p = _safe_path(path)
     if not p.exists():
         return f"Error: {path} does not exist."
     if p.is_dir():
         return f"Error: {path} is a directory. Use bash to list its contents."
     lines = p.read_text(encoding="utf-8", errors="replace").splitlines()
+    # Number the whole file before slicing, so a slice keeps its real line
+    # numbers (line 200 is still labeled 200) and matches grep/traceback output.
     numbered = [f"{i+1:5d}\t{line}" for i, line in enumerate(lines)]
-    return "\n".join(numbered)
+    start = max(offset, 1) - 1
+    end = start + limit if limit > 0 else len(numbered)
+    selected = numbered[start:end]
+    if not selected:
+        return f"Error: {path} has {len(lines)} lines; offset {offset} is past the end."
+    if len(selected) < len(lines):
+        selected.append(f"(showing lines {start + 1}-{start + len(selected)} of {len(lines)})")
+    return "\n".join(selected)
 
 
 @tool("Write content to a file, overwriting any existing content. Creates parent directories.")
