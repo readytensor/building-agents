@@ -37,13 +37,16 @@ def _load_instances(source):
 
 
 def _select_agent(name):
+    # The model label is derived from the agent's own config (eval.agent.MODEL),
+    # not a CLI flag: a free-text flag only labels the manifest and silently
+    # drifts from what the agent actually calls.
     if name == "fake-fixing":
-        return fixing_solver, "fake-fixing"
+        return fixing_solver, "fake-fixing", "(fake)"
     if name == "fake-noop":
-        return noop_solver, "fake-noop"
+        return noop_solver, "fake-noop", "(fake)"
     if name == "ep5":
-        from eval.agent import solve  # imported lazily: only the real run needs it
-        return solve, "ep5"
+        from eval.agent import MODEL, solve  # imported lazily: only the real run needs it
+        return solve, "ep5", MODEL
     raise SystemExit(f"unknown agent: {name}")
 
 
@@ -68,13 +71,12 @@ def main(argv=None):
                    help="filter by Verified's time-to-fix bucket before sampling")
     p.add_argument("--repo", default=None, help="filter by repo substring, e.g. flask")
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--model", default="(default)", help="recorded in the manifest/scoreboard")
     p.add_argument("--keep", choices=["none", "failures", "all"], default="failures")
     p.add_argument("--results-root", default="eval/results")
     p.add_argument("--timestamp", default=None, help="override batch id (tests use this)")
     args = p.parse_args(argv)
 
-    solve, agent_label = _select_agent(args.agent)
+    solve, agent_label, model_label = _select_agent(args.agent)
     instances = filter_pool(_load_instances(args.source),
                             difficulty=args.difficulty, repo=args.repo)
     picked = sample(instances, n=args.n, seed=args.seed, instance_id=args.instance_id)
@@ -97,12 +99,12 @@ def main(argv=None):
     write_summary(batch_dir, agg, results)
     write_manifest(batch_dir, {
         "timestamp": stamp, "agent": agent_label, "agent_git_sha": _agent_git_sha(),
-        "model": args.model, "source": args.source, "n": args.n, "repeat": args.repeat,
+        "model": model_label, "source": args.source, "n": args.n, "repeat": args.repeat,
         "seed": args.seed, "filters": {"difficulty": args.difficulty, "repo": args.repo},
         "instance_ids": [i.id for i in picked],
     })
     append_scoreboard(results_root, {
-        "timestamp": stamp, "agent": agent_label, "model": args.model, "source": args.source,
+        "timestamp": stamp, "agent": agent_label, "model": model_label, "source": args.source,
         "n": len(picked), "repeat": args.repeat, "seed": args.seed,
         # Local pytest is only meaningful for the local provider; swebench rows
         # are ungraded until eval.official adds the official row.
