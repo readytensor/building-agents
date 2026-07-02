@@ -52,7 +52,7 @@ def write_manifest(batch_dir: Path, manifest: dict) -> None:
 
 
 _SCOREBOARD_COLS = ["timestamp", "agent", "model", "source", "n", "repeat",
-                    "seed", "pass_at_1", "pass_at_k", "mean_seconds", "batch_dir"]
+                    "seed", "grading", "pass_at_1", "pass_at_k", "mean_seconds", "batch_dir"]
 
 
 def append_scoreboard(results_root: Path, row: dict) -> None:

@@ -73,6 +73,17 @@ def make_local_scorer(test_patch: str):
     return scorer
 
 
+def _ungraded_scorer(repo_dir: Path, fail_to_pass: list, pass_to_pass: list) -> Verdict:
+    """SWE-bench instances are NOT scored locally: host-side pytest against a
+    years-old dependency set produces noise, not signal (imports fail, warning
+    filters differ). The verdict of record comes from official Docker grading.
+    This returns instantly with an explicit pointer instead of a fake score."""
+    return Verdict(details=(
+        "Ungraded locally by design. Grade this batch officially with: "
+        "python -m eval.official <batch_dir> --model-name <model>"
+    ))
+
+
 def to_instance(record: dict, cache_dir: Path = CACHE_DIR) -> Instance:
     """Map one Verified record to an Instance. FAIL_TO_PASS / PASS_TO_PASS come
     as JSON-encoded string lists in the dataset. The clone is deferred to
@@ -87,7 +98,7 @@ def to_instance(record: dict, cache_dir: Path = CACHE_DIR) -> Instance:
         repo_dir=repo_dir,
         fail_to_pass=json.loads(record["FAIL_TO_PASS"]),
         pass_to_pass=json.loads(record["PASS_TO_PASS"]),
-        scorer=make_local_scorer(record.get("test_patch", "")),
+        scorer=_ungraded_scorer,
         prepare=lambda: clone_at_commit(url, commit, repo_dir),
         meta={"difficulty": record.get("difficulty", ""), "repo": repo},
         env_setup=lambda work_dir, iid=record["instance_id"]: _container_env(iid, work_dir),

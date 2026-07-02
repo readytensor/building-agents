@@ -104,6 +104,9 @@ def main(argv=None):
     append_scoreboard(results_root, {
         "timestamp": stamp, "agent": agent_label, "model": args.model, "source": args.source,
         "n": len(picked), "repeat": args.repeat, "seed": args.seed,
+        # Local pytest is only meaningful for the local provider; swebench rows
+        # are ungraded until eval.official adds the official row.
+        "grading": "local-pytest" if args.source == "local" else "ungraded",
         "pass_at_1": agg["pass_at_1"], "pass_at_k": agg["pass_at_k"],
         "mean_seconds": agg["mean_seconds"], "batch_dir": str(batch_dir),
     })

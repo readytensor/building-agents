@@ -30,10 +30,12 @@ load_dotenv(_REPO_ROOT / ".env")
 
 import skills  # noqa: E402
 import tools  # noqa: E402
-from tools import write_tool_telemetry  # noqa: E402
+from tools import tool, write_tool_telemetry  # noqa: E402
 from compaction import compact  # noqa: E402
 from planning import write_plan, system_with_plan  # noqa: E402
 from skills import list_skills, load_skill, system_with_skills  # noqa: E402
+
+from eval import container  # noqa: E402
 
 # Point the reused modules at eval's own skills (generalized for arbitrary
 # repos). The instance repo is pointed at per call, in solve().
@@ -63,6 +65,25 @@ SYSTEM = (
 )
 
 
+# Ep 5's bash runs on the host. For SWE-bench instances the runner starts the
+# instance's own Docker container (its real interpreter + frozen deps) and this
+# proxy sends commands there instead -- so the agent can actually run the
+# repo's test suite and get feedback on its edits. With no container active
+# (e.g. the local md2html provider), it falls through to the host bash.
+# tools.bash is the @tool-wrapped version; __wrapped__ is the original function
+# (calling the wrapped one here would record each call in the telemetry twice).
+_host_bash = tools.bash.__wrapped__
+
+
+@tool("Execute a shell command in the repository's own environment and return "
+      "its output. Use this to explore the project and to run its test suite "
+      "to verify your changes.")
+def bash(command: str) -> str:
+    if container.ACTIVE:
+        return container.exec_bash(container.ACTIVE, command)
+    return _host_bash(command)
+
+
 def _client(base_url):
     def api_key_for(url):
         by_provider = {"anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY",
@@ -85,7 +106,10 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
     tools.SANDBOX = Path(repo_dir).resolve()
 
     client = _client(BASE_URL)
-    base_tools = tools.TOOLS + [write_plan, list_skills, load_skill]
+    # Ep 5's toolset, with its host-only bash swapped for the container-aware
+    # proxy above (same name, same schema shape -- the model sees no difference).
+    file_tools = [bash if t.__name__ == "bash" else t for t in tools.TOOLS]
+    base_tools = file_tools + [write_plan, list_skills, load_skill]
     base_by_name = {t.__name__: t for t in base_tools}
 
     messages = [
