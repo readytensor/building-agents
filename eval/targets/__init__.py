@@ -50,6 +50,9 @@ class Instance:
     # expensive to obtain (a git clone) use this to fetch lazily, so only the
     # instances actually sampled pay the cost. None = repo_dir already exists.
     prepare: Optional[Callable[[], None]] = None
+    # Provider-specific attributes used for filtering the pool before sampling
+    # (e.g. {"difficulty": "<15 min fix", "repo": "pallets/flask"}).
+    meta: dict = field(default_factory=dict)
 
     def verify(self) -> Verdict:
         return self.scorer(self.repo_dir, self.fail_to_pass, self.pass_to_pass)

@@ -5,6 +5,26 @@ instances, and the seed is recorded in the batch manifest.
 """
 import random
 
+# CLI difficulty buckets -> the labels SWE-bench Verified's annotators used
+# (estimated time-to-fix). "hard" spans both multi-hour buckets.
+DIFFICULTY_LABELS = {
+    "easy": {"<15 min fix"},
+    "medium": {"15 min - 1 hour"},
+    "hard": {"1-4 hours", ">4 hours"},
+}
+
+
+def filter_pool(instances, difficulty=None, repo=None):
+    """Narrow the pool by provider metadata before sampling. Instances with no
+    matching meta key simply don't match a filter."""
+    pool = instances
+    if difficulty is not None:
+        labels = DIFFICULTY_LABELS[difficulty]
+        pool = [i for i in pool if i.meta.get("difficulty") in labels]
+    if repo is not None:
+        pool = [i for i in pool if repo in i.meta.get("repo", "")]
+    return pool
+
 
 def sample(instances, n, seed, instance_id=None):
     """Return the instances to run.

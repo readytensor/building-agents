@@ -88,6 +88,7 @@ def to_instance(record: dict, cache_dir: Path = CACHE_DIR) -> Instance:
         pass_to_pass=json.loads(record["PASS_TO_PASS"]),
         scorer=make_local_scorer(record.get("test_patch", "")),
         prepare=lambda: clone_at_commit(url, commit, repo_dir),
+        meta={"difficulty": record.get("difficulty", ""), "repo": repo},
     )
 
 

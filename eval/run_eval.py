@@ -16,7 +16,7 @@ from pathlib import Path
 
 from eval.results import aggregate, append_scoreboard, apply_retention, write_manifest, write_summary
 from eval.runner import run_instance
-from eval.sampling import sample
+from eval.sampling import filter_pool, sample
 from eval.tests.conftest import fixing_solver, noop_solver  # fake adapters live with the tests
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -64,6 +64,9 @@ def main(argv=None):
     p.add_argument("--n", type=int, default=1)
     p.add_argument("--repeat", type=int, default=1)
     p.add_argument("--id", dest="instance_id", default=None)
+    p.add_argument("--difficulty", choices=["easy", "medium", "hard"], default=None,
+                   help="filter by Verified's time-to-fix bucket before sampling")
+    p.add_argument("--repo", default=None, help="filter by repo substring, e.g. flask")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--model", default="(default)", help="recorded in the manifest/scoreboard")
     p.add_argument("--keep", choices=["none", "failures", "all"], default="failures")
@@ -72,10 +75,11 @@ def main(argv=None):
     args = p.parse_args(argv)
 
     solve, agent_label = _select_agent(args.agent)
-    instances = _load_instances(args.source)
+    instances = filter_pool(_load_instances(args.source),
+                            difficulty=args.difficulty, repo=args.repo)
     picked = sample(instances, n=args.n, seed=args.seed, instance_id=args.instance_id)
     if not picked:
-        raise SystemExit("no instances selected")
+        raise SystemExit("no instances selected (check --id / --difficulty / --repo)")
 
     results_root = Path(args.results_root)
     stamp = args.timestamp or datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -94,7 +98,8 @@ def main(argv=None):
     write_manifest(batch_dir, {
         "timestamp": stamp, "agent": agent_label, "agent_git_sha": _agent_git_sha(),
         "model": args.model, "source": args.source, "n": args.n, "repeat": args.repeat,
-        "seed": args.seed, "instance_ids": [i.id for i in picked],
+        "seed": args.seed, "filters": {"difficulty": args.difficulty, "repo": args.repo},
+        "instance_ids": [i.id for i in picked],
     })
     append_scoreboard(results_root, {
         "timestamp": stamp, "agent": agent_label, "model": args.model, "source": args.source,
