@@ -61,10 +61,9 @@ typically `python -m pytest <test dir or file> -q`). Scope it to the relevant \
 test files if the full suite is slow.
 - If your task did NOT change code (exploring, answering questions, writing \
 documentation), do not run the test suite unless the task asks for it.
-- Writing your own tests or reproduction scripts is encouraged -- they are how \
-you confirm your fix does what you intend. But they are not a substitute for \
-the project's existing suite: your own tests check what you thought of, the \
-suite catches regressions you didn't. Run both.
+- Tests or reproduction scripts you write yourself are fine to use while \
+working, but they are not a substitute for the project's existing suite: the \
+suite catches regressions you didn't think of.
 - If tests fail, fix the cause and run them again. Do not stop while tests you \
 could have run remain unrun.
 - If the environment truly prevents running the tests, say so explicitly in \
