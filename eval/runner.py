@@ -1,0 +1,43 @@
+"""Run one instance end-to-end: materialize a fresh working copy, hand it to the
+agent, score the result, and write the always-keep artifacts.
+
+The agent edits the working copy in place; the diff is captured from the copy's
+git state (not the agent's return value), so real and fake agents are handled
+uniformly. Scoring runs on that same edited copy. The base repo is never touched
+(the agent works on a copy under the batch's own directory), so re-runs are
+deterministic.
+"""
+import json
+import time
+from dataclasses import replace
+from pathlib import Path
+
+from eval.materialize import materialize, capture_diff
+from eval.targets import Instance, SolveFn
+
+
+def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path, run_label: str) -> dict:
+    """Materialize, solve, verify, and write verify.json + diff.patch under
+    batch_dir/run_label/. Returns a small result dict for the summary/scoreboard."""
+    inst_dir = batch_dir / run_label
+    inst_dir.mkdir(parents=True, exist_ok=True)
+
+    work = materialize(instance.repo_dir, inst_dir / "repo")
+    scored = replace(instance, repo_dir=work)  # verify() must score the working copy
+
+    start = time.monotonic()
+    solve(work, instance.problem_statement)
+    diff = capture_diff(work)
+    verdict = scored.verify()
+    elapsed = round(time.monotonic() - start, 3)
+
+    (inst_dir / "diff.patch").write_text(diff, encoding="utf-8")
+    (inst_dir / "verify.json").write_text(json.dumps(verdict.to_dict(), indent=2), encoding="utf-8")
+
+    return {
+        "id": instance.id,
+        "run_label": run_label,
+        "passed": verdict.passed,
+        "seconds": elapsed,
+        "inst_dir": str(inst_dir),
+    }
