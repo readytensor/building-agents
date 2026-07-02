@@ -117,15 +117,25 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
                 mechanism_calls[tc.function.name] += 1
             try:
                 fn = by_name[tc.function.name]
-                result = fn(**json.loads(tc.function.arguments))
+                args = json.loads(tc.function.arguments)
+                # Live progress: one short line per tool call, so a background
+                # run can be followed with tail -f on its log.
+                preview = ", ".join(
+                    f"{k}={v!r}" if len(repr(v)) < 60 else f"{k}=<{len(str(v))} chars>"
+                    for k, v in args.items()
+                )
+                print(f"[iter {iteration}] {tc.function.name}({preview})", flush=True)
+                result = fn(**args)
             except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
                 result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
+                print(f"[iter {iteration}] ! {result}", flush=True)
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
         messages, did, ci, co, _ = compact(messages, client, MODEL)
         if did:
             compactions += 1
             compact_in += ci
             compact_out += co
+            print(f"[iter {iteration}] [compaction fired: summarizer in={ci} out={co}]", flush=True)
 
     write_tool_telemetry()
     # Same recording split as the episodes: the agent writes raw counters, the
