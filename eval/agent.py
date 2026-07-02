@@ -41,8 +41,11 @@ from eval import container  # noqa: E402
 # repos). The instance repo is pointed at per call, in solve().
 skills._SKILLS_DIR = _REPO_ROOT / "eval" / "skills"
 
-MODEL = os.environ.get("LLM_AGENT_MODEL", "gpt-5-mini")
-BASE_URL = os.environ.get("LLM_BASE_URL") or ""
+# Eval runs have their own model config so the shared LLM_* vars can keep
+# driving the episodes. Precedence: EVAL_LLM_* (from .env or inline) falls back
+# to the episodes' LLM_* if unset.
+MODEL = os.environ.get("EVAL_LLM_AGENT_MODEL") or os.environ.get("LLM_AGENT_MODEL", "gpt-5-mini")
+BASE_URL = os.environ.get("EVAL_LLM_BASE_URL") or os.environ.get("LLM_BASE_URL") or ""
 MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 200))
 
 SYSTEM = """You are a coding assistant working inside a real code repository. \
