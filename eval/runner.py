@@ -8,12 +8,18 @@ uniformly. Scoring runs on that same edited copy. The base repo is never touched
 deterministic.
 """
 import json
+import shutil
 import time
 from dataclasses import replace
 from pathlib import Path
 
 from eval.materialize import materialize, capture_diff
 from eval.targets import Instance, SolveFn
+
+# Telemetry files the agent writes to its own cwd (same recording convention as
+# the episodes). The runner moves them into the instance's results folder so
+# they are preserved per attempt instead of overwritten by the next run.
+_TELEMETRY_FILES = ("tool_calls.jsonl", "metrics.json")
 
 
 def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path, run_label: str) -> dict:
@@ -35,6 +41,12 @@ def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path, run_label:
 
     (inst_dir / "diff.patch").write_text(diff, encoding="utf-8")
     (inst_dir / "verify.json").write_text(json.dumps(verdict.to_dict(), indent=2), encoding="utf-8")
+
+    # Collect the agent's telemetry (if it wrote any) into this attempt's folder.
+    for name in _TELEMETRY_FILES:
+        produced = Path(name)
+        if produced.exists():
+            shutil.move(str(produced), str(inst_dir / name))
 
     return {
         "id": instance.id,

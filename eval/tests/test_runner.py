@@ -37,6 +37,21 @@ def test_noop_solver_yields_a_failing_result(base_repo, tmp_path, solvers):
     assert (out / "calc__add" / "diff.patch").read_text() == ""
 
 
+def test_runner_collects_agent_telemetry_files(base_repo, tmp_path, solvers, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # telemetry lands in cwd; keep the test isolated
+
+    def telemetry_solver(repo_dir, task):
+        (tmp_path / "tool_calls.jsonl").write_text('{"tool": "bash"}\n')
+        (tmp_path / "metrics.json").write_text('{"agents": []}')
+        return ""
+
+    inst = _make_instance(base_repo)
+    run_instance(inst, telemetry_solver, tmp_path / "batch", run_label="calc__add")
+    assert (tmp_path / "batch" / "calc__add" / "tool_calls.jsonl").exists()
+    assert (tmp_path / "batch" / "calc__add" / "metrics.json").exists()
+    assert not (tmp_path / "tool_calls.jsonl").exists()  # moved, not copied
+
+
 def test_runner_does_not_mutate_the_base_repo(base_repo, tmp_path, solvers):
     inst = _make_instance(base_repo)
     run_instance(inst, solvers["fixing"], tmp_path / "batch", run_label="calc__add")

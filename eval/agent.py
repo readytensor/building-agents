@@ -84,6 +84,9 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
         {"role": "user", "content": problem_statement},
     ]
     iteration = 0
+    total_in = total_out = 0
+    compactions = compact_in = compact_out = 0
+    tool_call_count = 0
     while iteration < MAX_ITERATIONS:
         iteration += 1
         tools.CURRENT_ROUND = iteration
@@ -92,10 +95,13 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
         tool_defs = [fn.tool_definition for fn in by_name.values()]
 
         resp = client.chat.completions.create(model=MODEL, messages=messages, tools=tool_defs)
+        total_in += resp.usage.prompt_tokens
+        total_out += resp.usage.completion_tokens
         msg = resp.choices[0].message
         messages.append(msg.model_dump(exclude_none=True))
         if not msg.tool_calls:
             break
+        tool_call_count += len(msg.tool_calls)
         for tc in msg.tool_calls:
             try:
                 fn = by_name[tc.function.name]
@@ -103,7 +109,29 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
             except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
                 result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
             messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
-        messages, *_ = compact(messages, client, MODEL)
+        messages, did, ci, co, _ = compact(messages, client, MODEL)
+        if did:
+            compactions += 1
+            compact_in += ci
+            compact_out += co
 
     write_tool_telemetry()
+    # Same recording split as the episodes: the agent writes raw counters, the
+    # harness owns collection/reporting. The runner moves this into the batch dir.
+    metrics = {
+        "agents": [{
+            "label": "agent",
+            "iterations": iteration,
+            "input_tokens": total_in,
+            "output_tokens": total_out,
+            "tool_calls": tool_call_count,
+            "compactions": compactions,
+            "compact_in": compact_in,
+            "compact_out": compact_out,
+            "skills": {"loaded": list(skills.LOADED_SKILLS)},
+        }],
+        "config": {"MODEL": MODEL, "MAX_ITERATIONS": MAX_ITERATIONS},
+    }
+    with open("metrics.json", "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
     return ""  # the runner captures the diff from the repo's git state
