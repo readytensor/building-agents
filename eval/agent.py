@@ -54,10 +54,13 @@ whose description matches the work.
 - If you need a capability you don't currently have, check list_skills first \
 rather than assuming you can't do it.
 
-## Verification: REQUIRED before you finish
-- Before your final answer, you MUST run the project's own test suite with the \
-bash tool (for Python projects, typically `python -m pytest <test dir or file> -q`). \
-Scope it to the relevant test files if the full suite is slow.
+## Verification: REQUIRED whenever you change code
+- If your task involved modifying the codebase, you MUST run the project's own \
+test suite with the bash tool before your final answer (for Python projects, \
+typically `python -m pytest <test dir or file> -q`). Scope it to the relevant \
+test files if the full suite is slow.
+- If your task did NOT change code (exploring, answering questions, writing \
+documentation), do not run the test suite unless the task asks for it.
 - Scratch scripts you wrote yourself do not count as verification: only the \
 project's existing tests catch regressions you didn't think of.
 - If tests fail, fix the cause and run them again. Do not stop while tests you \
