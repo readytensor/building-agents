@@ -5,18 +5,16 @@ maps each record into the shared Instance shape. The target repo is cloned
 lazily -- only for instances actually sampled -- and cached under eval/cache/
 keyed by repo + base commit, so repeat runs reuse the checkout.
 
-Scoring here is LOCAL, best-effort grading: apply the instance's held-out
-test_patch (the gold tests, which the agent never sees), then run the
-FAIL_TO_PASS / PASS_TO_PASS node ids with pytest in the working copy. This
-requires the repo's dependencies to be importable in the current environment
-and is NOT the official SWE-bench Docker grading; treat results as indicative.
+These instances are deliberately NOT scored locally: running the repo's tests
+against the host's (years-newer) dependency set produces noise, not signal.
+The verdict of record is official SWE-bench Docker grading -- per sample via
+run_eval --grade, or per batch via eval.official.
 """
 import json
 import subprocess
 from pathlib import Path
 
 from eval import container
-from eval.scoring import score_pytest
 from eval.targets import Instance, Verdict
 
 # Where lazy clones live: eval/cache/<org__repo>/<base_commit>/ (gitignored).
@@ -48,29 +46,6 @@ def clone_at_commit(url: str, commit: str, dest: Path) -> Path:
     subprocess.run(["git", "-C", str(dest), "checkout", "-q", commit],
                    check=True, capture_output=True, text=True)
     return dest
-
-
-def make_local_scorer(test_patch: str):
-    """A scorer that applies the held-out test patch, then runs the node ids.
-    The patch is applied at scoring time (after the agent's diff is captured),
-    so the agent never sees the gold tests and the model patch stays clean."""
-    def scorer(repo_dir: Path, fail_to_pass: list, pass_to_pass: list) -> Verdict:
-        note = "LOCAL grading (test_patch applied locally; not official SWE-bench Docker grading)."
-        if test_patch:
-            apply = subprocess.run(
-                ["git", "-C", str(repo_dir), "apply", "--whitespace=nowarn", "-"],
-                input=test_patch, capture_output=True, text=True,
-            )
-            if apply.returncode != 0:
-                return Verdict(
-                    fail_to_pass={"passed": [], "failed": list(fail_to_pass)},
-                    pass_to_pass={"passed": [], "failed": list(pass_to_pass)},
-                    details=f"{note}\ntest_patch failed to apply:\n{apply.stderr[-1500:]}",
-                )
-        v = score_pytest(repo_dir, fail_to_pass, pass_to_pass)
-        v.details = f"{note}\n{v.details}"
-        return v
-    return scorer
 
 
 def _ungraded_scorer(repo_dir: Path, fail_to_pass: list, pass_to_pass: list) -> Verdict:

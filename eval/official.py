@@ -32,6 +32,11 @@ GOLD_BASELINE_DIR = _EVAL_DIR / "cache" / "gold_baselines"
 _GRADE_SH = _EVAL_DIR / "wsl" / "grade.sh"
 _WSL_DISTRO = "Ubuntu-24.04"
 
+# Repeat attempts get "-runN" directory suffixes (run_eval's run_label); the
+# one rule for recognizing them, shared by everything that maps an attempt
+# directory back to its instance id.
+_RUN_SUFFIX = re.compile(r"-run\d+$")
+
 
 def wsl_path(win_path: Path) -> str:
     """C:\\Users\\... -> /mnt/c/Users/... (forward slashes, lowercase drive)."""
@@ -57,7 +62,7 @@ def write_predictions(batch_dir: Path, model_name: str) -> Path:
     attempts get -runN dir suffixes; the grader keys on instance_id)."""
     preds = []
     for d in sorted(Path(batch_dir).iterdir()):
-        if d.is_dir() and (d / "diff.patch").exists() and "-run" not in d.name:
+        if d.is_dir() and (d / "diff.patch").exists() and not _RUN_SUFFIX.search(d.name):
             preds.append({
                 "instance_id": d.name,
                 "model_name_or_path": model_name,
@@ -124,8 +129,8 @@ def grade_instance(inst_dir, model_name: str, run_id: str = None, runner=run_gra
     setup surfaces after the first sample instead of after a costly full batch.
     Writes official.json into inst_dir and returns it."""
     inst_dir = Path(inst_dir)
-    # Repeat attempts get "-runN" dir suffixes; the grader keys on the real id.
-    iid = re.sub(r"-run\d+$", "", inst_dir.name)
+    # The grader keys on the real instance id, not the attempt label.
+    iid = _RUN_SUFFIX.sub("", inst_dir.name)
     run_id = run_id or f"{inst_dir.parent.name}-{inst_dir.name}".replace(".", "-")
 
     pred = {"instance_id": iid, "model_name_or_path": model_name,

@@ -15,10 +15,10 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+from eval.fake_agents import fixing_solver, noop_solver
 from eval.results import aggregate, append_scoreboard, apply_retention, write_manifest, write_summary
 from eval.runner import run_instance
 from eval.sampling import filter_pool, sample
-from eval.tests.conftest import fixing_solver, noop_solver  # fake adapters live with the tests
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -51,16 +51,14 @@ def _select_agent(name):
     raise SystemExit(f"unknown agent: {name}")
 
 
-def _grade_now(inst_dir, model_label):
+def _grade_now(inst_dir, model_label) -> bool:
     """--grade path: officially grade one just-finished sample. A grading
-    failure is reported and recorded as None, not fatal — the remaining
-    samples still run, and the sample can be re-graded later via eval.official."""
+    failure is FATAL by design: --grade exists to surface a broken setup at
+    the first sample, and scoring an infra failure as an agent failure would
+    corrupt the pass rate. Finished samples stay on disk; after fixing the
+    environment, grade them with eval.official and re-run what's missing."""
     from eval.official import grade_instance  # lazy: needs WSL + Docker only here
-    try:
-        verdict = grade_instance(inst_dir, model_label)
-    except Exception as e:
-        print(f"[eval] {inst_dir.name}: grading failed: {e}", flush=True)
-        return None
+    verdict = grade_instance(inst_dir, model_label)
     state = "RESOLVED" if verdict["resolved"] else "unresolved"
     print(f"[eval] {inst_dir.name}: official verdict {state}", flush=True)
     return verdict["resolved"]
@@ -123,7 +121,7 @@ def main(argv=None):
     # With --grade the official verdicts are the numbers of record; without it,
     # swebench rows stay explicitly ungraded (local pytest is env-noise there).
     if args.grade:
-        results = [dict(r, passed=bool(r.get("official_resolved"))) for r in results]
+        results = [dict(r, passed=r["official_resolved"]) for r in results]
     agg = aggregate(results, repeat=args.repeat)
     write_summary(batch_dir, agg, results)
     write_manifest(batch_dir, {

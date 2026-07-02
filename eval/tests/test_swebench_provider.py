@@ -71,31 +71,6 @@ def test_clone_at_commit_is_idempotent(tmp_path):
     assert "return a - b" in (dest / "calc.py").read_text()
 
 
-def test_scorer_applies_test_patch_before_scoring(tmp_path):
-    # Base repo has NO test file at all; the test_patch adds it (SWE-bench's
-    # F2P tests usually don't exist at base_commit).
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    (repo / "calc.py").write_text("def add(a, b):\n    return a + b\n", encoding="utf-8")
-    subprocess.run(["git", "-c", "user.email=e@e", "-c", "user.name=e", "-C", str(repo),
-                    "init", "-q"], check=True, capture_output=True)
-    test_patch = (
-        "diff --git a/test_math.py b/test_math.py\n"
-        "new file mode 100644\n"
-        "--- /dev/null\n"
-        "+++ b/test_math.py\n"
-        "@@ -0,0 +1,4 @@\n"
-        "+from calc import add\n"
-        "+\n"
-        "+def test_add():\n"
-        "+    assert add(2, 3) == 5\n"
-    )
-    scorer = swebench.make_local_scorer(test_patch)
-    v = scorer(repo, ["test_math.py::test_add"], [])
-    assert v.passed is True
-    assert "local grading" in v.details.lower() or "not official" in v.details.lower()
-
-
 def test_get_instances_without_datasets_gives_install_hint(monkeypatch):
     monkeypatch.setattr(swebench, "_load_dataset_records", None)
     with pytest.raises(RuntimeError) as exc:
