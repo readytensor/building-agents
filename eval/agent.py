@@ -114,10 +114,14 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
     """Run the Ep 5 agent over repo_dir with problem_statement as the task.
     Edits repo_dir in place and returns "" — the runner captures the diff from
     the repo's git state, keeping diff capture in one place."""
-    # Reset per-run skill state and repoint the file tools at this instance's
-    # working copy for the whole run.
+    # Reset per-run state and repoint the file tools at this instance's working
+    # copy for the whole run. The episodes never reset TOOL_CALLS (one run per
+    # process), but a multi-sample batch runs several solves in one process --
+    # without the clear, each sample's tool_calls.jsonl would accumulate every
+    # earlier sample's calls.
     skills.LOADED_SKILLS.clear()
     skills.LOADED_TOOLS.clear()
+    tools.TOOL_CALLS.clear()
     tools.SANDBOX = Path(repo_dir).resolve()
 
     client = _client(BASE_URL)
