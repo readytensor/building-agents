@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Official SWE-bench grading inside WSL, driving Docker Desktop's engine.
-# Usage: grade.sh <predictions_path_wsl> <run_id> [instance_ids...]
+# Usage: grade.sh <predictions_path_wsl | gold> <run_id> <out_dir_wsl> [instance_ids...]
+# Copies each instance's report.json into <out_dir_wsl>/<instance_id>.json.
 set -eu
 PREDICTIONS=$1
 RUN_ID=$2
-shift 2
+OUT_DIR=$3
+shift 3
 
 # Docker Desktop's engine, via the shared socket (works even when the distro's
 # /var/run/docker.sock integration link is not provisioned).
@@ -33,8 +35,15 @@ fi
   --cache_level env \
   $IDS
 
-echo "=== report files ==="
-ls -la ./*.json 2>/dev/null || true
-for f in ./*"$RUN_ID"*.json; do
-  [ -f "$f" ] && echo "--- $f" && cat "$f"
+# Copy each instance's report.json back to the caller's out_dir, named by
+# instance id. The model-name dir under the run_id varies (it comes from
+# predictions' model_name_or_path, or "gold"), so glob over it.
+mkdir -p "$OUT_DIR"
+found=0
+for report in "$WORKDIR"/logs/run_evaluation/"$RUN_ID"/*/*/report.json; do
+  [ -f "$report" ] || continue
+  iid=$(basename "$(dirname "$report")")
+  cp "$report" "$OUT_DIR/$iid.json"
+  found=$((found + 1))
 done
+echo "copied $found report(s) -> $OUT_DIR"
