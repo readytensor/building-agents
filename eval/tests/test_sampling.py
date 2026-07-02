@@ -3,10 +3,10 @@ from eval.sampling import sample
 
 def _items(n):
     # Minimal stand-ins: sampling only needs an `id` attribute.
-    class I:
+    class Stub:
         def __init__(self, id):
             self.id = id
-    return [I(f"inst-{i}") for i in range(n)]
+    return [Stub(f"inst-{i}") for i in range(n)]
 
 
 def test_pin_by_id_returns_just_that_instance():

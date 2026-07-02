@@ -4,9 +4,9 @@ from eval.tests.test_swebench_provider import FAKE_RECORD
 
 
 def _inst(id, difficulty, repo):
-    class I:
+    class Stub:
         pass
-    i = I()
+    i = Stub()
     i.id = id
     i.meta = {"difficulty": difficulty, "repo": repo}
     return i

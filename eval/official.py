@@ -108,8 +108,8 @@ def grade_batch(batch_dir, model_name: str, run_id: str = None, runner=run_grade
     batch_dir = Path(batch_dir)
     run_id = run_id or batch_dir.name.replace(".", "-")
     predictions = write_predictions(batch_dir, model_name)
-    ids = [json.loads(l)["instance_id"]
-           for l in predictions.read_text(encoding="utf-8").splitlines()]
+    ids = [json.loads(line)["instance_id"]
+           for line in predictions.read_text(encoding="utf-8").splitlines()]
     if not ids:
         raise SystemExit(f"no diff.patch files found under {batch_dir}")
 

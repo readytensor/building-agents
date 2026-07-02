@@ -41,7 +41,7 @@ def test_write_predictions_uses_first_attempt_only(tmp_path):
         d.mkdir(parents=True)
         (d / "diff.patch").write_text(content)
     path = official.write_predictions(batch, "test-model")
-    preds = [json.loads(l) for l in path.read_text().splitlines()]
+    preds = [json.loads(line) for line in path.read_text().splitlines()]
     assert {p["instance_id"]: p["model_patch"] for p in preds} == {
         "inst-1": "patch1", "inst-2": "patch2"}
     assert all(p["model_name_or_path"] == "test-model" for p in preds)
