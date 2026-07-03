@@ -43,12 +43,14 @@ def test_runner_collects_agent_telemetry_files(base_repo, tmp_path, solvers, mon
     def telemetry_solver(repo_dir, task):
         (tmp_path / "tool_calls.jsonl").write_text('{"tool": "bash"}\n')
         (tmp_path / "metrics.json").write_text('{"agents": []}')
+        (tmp_path / "final_message.md").write_text("all done")
         return ""
 
     inst = _make_instance(base_repo)
     run_instance(inst, telemetry_solver, tmp_path / "batch", run_label="calc__add")
     assert (tmp_path / "batch" / "calc__add" / "tool_calls.jsonl").exists()
     assert (tmp_path / "batch" / "calc__add" / "metrics.json").exists()
+    assert (tmp_path / "batch" / "calc__add" / "final_message.md").exists()
     assert not (tmp_path / "tool_calls.jsonl").exists()  # moved, not copied
 
 

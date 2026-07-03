@@ -9,6 +9,7 @@ def _seed_instance(batch_dir, label, passed):
     (inst / "output.log").write_text("verbose")
     (inst / "metrics.json").write_text("{}")
     (inst / "tool_calls.jsonl").write_text("{}")
+    (inst / "final_message.md").write_text("done")
     return {"inst_dir": str(inst), "passed": passed}
 
 
@@ -28,6 +29,12 @@ def test_failures_keep_gzipped_verbose_passes_drop_it(tmp_path):
     assert not (batch / "bad" / "output.log").exists()
     assert (batch / "bad" / "output.log.gz").exists()
     assert (batch / "bad" / "verify.json").exists()
+
+    # metrics and the final message survive raw for BOTH outcomes: analysis
+    # needs passed runs too (batch20 lost every resolved sample's telemetry).
+    for label in ("ok", "bad"):
+        assert (batch / label / "metrics.json").exists()
+        assert (batch / label / "final_message.md").exists()
 
 
 def test_keep_all_keeps_everything(tmp_path):

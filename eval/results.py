@@ -70,7 +70,10 @@ def append_scoreboard(results_root: Path, row: dict) -> None:
 
 
 # --- Retention: keep verbose logs only where you'd actually look (failures). ---
-_VERBOSE = ("output.log", "tool_calls.jsonl", "metrics.json")
+# metrics.json and final_message.md are deliberately NOT here: both are small
+# and both proved necessary for analyzing PASSED runs too (batch20 lost the
+# telemetry of every resolved sample to this list).
+_VERBOSE = ("output.log", "tool_calls.jsonl")
 
 
 def apply_retention(batch_dir: Path, results: list, keep: str) -> None:

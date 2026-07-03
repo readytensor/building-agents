@@ -86,8 +86,15 @@ def _call_tool(by_name, name, args):
     if container.ACTIVE and name in _IN_CONTAINER_TOOLS:
         # Same telemetry record the @tool wrapper writes on the host path.
         tools.TOOL_CALLS.append({"round": tools.CURRENT_ROUND, "tool": name, "args": dict(args)})
-        return container.fileop(container.ACTIVE, name, args)
-    return by_name[name](**args)
+        result = container.fileop(container.ACTIVE, name, args)
+    else:
+        result = by_name[name](**args)
+    # Postmortems need what the tool RETURNED, not just what was asked (a miss
+    # is often explained by the output the model saw). Every tool is @tool-
+    # wrapped, so the record this call appended is the last one; tag it.
+    if tools.TOOL_CALLS:
+        tools.TOOL_CALLS[-1]["result_tail"] = str(result)[-500:]
+    return result
 
 
 def _client(base_url):
@@ -175,6 +182,14 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
             print(f"[iter {iteration}] [compaction fired: summarizer in={ci} out={co}]", flush=True)
 
     write_tool_telemetry()
+    # The closing summary is the only place the agent states what it did and
+    # what it could not verify -- without this file that conclusion is lost
+    # (learned on sympy-21612: we couldn't tell an honest blocked engineer
+    # from a confused agent).
+    final = next((m.get("content") or "" for m in reversed(messages)
+                  if m.get("role") == "assistant"), "")
+    with open("final_message.md", "w", encoding="utf-8") as f:
+        f.write(final)
     # Same recording split as the episodes: the agent writes raw counters, the
     # harness owns collection/reporting. The runner moves this into the batch dir.
     metrics = {
