@@ -12,11 +12,13 @@ For the full series narrative, the episode table, and setup/quickstart, read [`R
 building-agents/
 ├── episodes/
 │   ├── 01-loop/
-│   │   ├── agent.py      # the episode's agent: start here
-│   │   ├── initial/      # pristine starting copy of the md2html project
-│   │   └── sandbox/      # where the agent works (recreated every run)
+│   │   ├── agent.py           # the episode's agent: start here
+│   │   ├── system_prompt.md   # the agent's system prompt (shared core across episodes)
+│   │   ├── initial/           # pristine starting copy of the md2html project
+│   │   └── sandbox/           # where the agent works (recreated every run)
 │   ├── 02-tools/  03-compaction/  04-working-memory/  05-skills/  06-subagents/
 ├── examples/             # the FINISHED md2html (every feature) + a sample doc that uses them all
+├── eval/                 # evaluation harness (SWE-bench Verified + the episode tasks)
 ├── run.py                # optional harness to record a run
 ├── capture.py            # terminal recorder used by run.py --capture
 └── requirements.txt
@@ -36,6 +38,7 @@ diff episodes/01-loop/agent.py episodes/02-tools/agent.py   # what one idea adde
 - **`sandbox/` is ephemeral.** It is recreated on every run and is gitignored. Don't keep anything there you care about, and don't be surprised when it resets.
 - **Stay inside one episode.** A change for Episode 3 belongs in `episodes/03-compaction/`. Don't edit one episode's files to fix another, and don't let one episode's `agent.py` reach into another's directory.
 - **The diff between episodes is the lesson.** When you add or change something, keep the *delta* from the previous episode small and legible: that delta is the teaching point, not just the end state.
+- **The system prompt is one shared artifact.** Every episode's `system_prompt.md` carries the same core text; later episodes add only the section for the mechanism they introduce, and `eval/system_prompt.md` matches Episode 5 exactly. Never edit one copy alone: change all of them together (a drift test in `eval/tests/` fails otherwise).
 
 ## Verify your work
 
@@ -46,6 +49,12 @@ cd episodes/02-tools/sandbox && python -m pytest -q
 ```
 
 **"Done" means the tests pass, not that the agent (or you) said so.** Confirm with command output before claiming a change works. Several episodes are built around exactly this discipline: verifying with tests rather than trusting a self-assessment.
+
+The eval harness has its own offline suite (fake agents, no API calls, runs in seconds):
+
+```bash
+python -m pytest eval/tests -q
+```
 
 ## Code conventions
 
