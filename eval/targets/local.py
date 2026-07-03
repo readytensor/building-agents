@@ -6,10 +6,11 @@ fail_to_pass = the fixture tests the task exists to make pass (pinned by
 hand from each tree's baseline), pass_to_pass = every other test in the
 tree (collected automatically at load time, before any agent runs).
 
-Episode 3's rename task is the special case: it has no failing test at
-baseline, so its instance only checks "suite still green" -- whether the
-rename actually happened needs a manual look at the diff, mirroring the
-episode's own grep-based verification.
+Episode 3's rename task is the special case: nothing fails at baseline (a
+rename breaks no behavior), so its success test is HELD OUT -- written into
+the working copy at scoring time, after the agent's diff is captured. This
+mirrors SWE-bench's held-out test_patch: the agent never sees the tests it
+is graded on, so it can't tune -- or rewrite -- them.
 """
 import subprocess
 from pathlib import Path
@@ -83,12 +84,22 @@ aren't implemented.
 
 Make sure all existing tests still pass. Keep diffs minimal."""
 
+# Held-out grading test for the rename task (the agent never sees this file;
+# it is injected at scoring time). Fails at baseline: ASTNode doesn't exist yet.
+_EP3_HELD_OUT_TEST = '''\
+def test_ast_class_is_named_astnode():
+    from md2html.parser import ASTNode  # noqa: F401 -- ImportError before the rename
+    import md2html.parser as parser_module
+    assert not hasattr(parser_module, "Node"), "old name Node should be retired"
+'''
+
 DEFAULT_SPECS = [
     {
         "id": "md2html__ep3-rename-astnode",
         "base": _REPO_ROOT / "episodes" / "03-compaction" / "initial",
         "problem_statement": _EP3_TASK,
-        "fail_to_pass": [],  # no failing test at baseline; see module docstring
+        "fail_to_pass": ["tests/test_rename.py::test_ast_class_is_named_astnode"],
+        "held_out_tests": {"tests/test_rename.py": _EP3_HELD_OUT_TEST},
     },
     {
         "id": "md2html__ep4-reference-links",
@@ -113,6 +124,21 @@ DEFAULT_SPECS = [
         ],
     },
 ]
+
+
+def make_held_out_scorer(held_out_tests: dict):
+    """A scorer that injects extra test files into the working copy right
+    before running pytest. The runner captures the agent's diff BEFORE verify,
+    so the injected files never appear in the patch; the agent never saw them,
+    so they are immune to the failure mode where an agent edits the tests it
+    verifies against."""
+    def scorer(repo_dir: Path, fail_to_pass: list, pass_to_pass: list):
+        for relpath, content in held_out_tests.items():
+            path = Path(repo_dir) / relpath
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        return score_pytest(repo_dir, fail_to_pass, pass_to_pass)
+    return scorer
 
 
 def _collect_node_ids(base_dir: Path) -> list:
@@ -141,13 +167,14 @@ def build_instances(base_dir=None, specs=None) -> list:
         if pass_to_pass is None:
             fail = set(spec["fail_to_pass"])
             pass_to_pass = [n for n in _collect_node_ids(base) if n not in fail]
+        held_out = spec.get("held_out_tests")
         instances.append(Instance(
             id=spec["id"],
             problem_statement=spec["problem_statement"],
             repo_dir=base,
             fail_to_pass=spec["fail_to_pass"],
             pass_to_pass=pass_to_pass,
-            scorer=score_pytest,
+            scorer=make_held_out_scorer(held_out) if held_out else score_pytest,
         ))
     return instances
 

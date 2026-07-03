@@ -42,9 +42,46 @@ def test_default_specs_are_the_episode_tasks():
         # Each tree's suite has 40+ tests; a tiny count means collection broke.
         assert len(inst.pass_to_pass) >= 40, f"{inst.id}: suspiciously few P2P ids"
         assert not set(inst.fail_to_pass) & set(inst.pass_to_pass)
-    # The failing fixture tests are pinned per episode (ep3 has none: rename).
-    assert by_id["md2html__ep3-rename-astnode"].fail_to_pass == []
+    # The failing fixture tests are pinned per episode; ep3's success test is
+    # held out (injected at scoring time), since a rename fails nothing.
+    assert by_id["md2html__ep3-rename-astnode"].fail_to_pass == [
+        "tests/test_rename.py::test_ast_class_is_named_astnode"]
     assert len(by_id["md2html__ep6-gfm-trio"].fail_to_pass) == 3
+
+
+def test_held_out_tests_are_injected_at_scoring_time(tmp_path):
+    # Working copy as the agent left it: renamed correctly, no test for it.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "lib.py").write_text("class ASTNode:\n    pass\n")
+
+    held_out = {"test_held_out.py": (
+        "def test_renamed():\n"
+        "    from lib import ASTNode  # noqa: F401\n"
+        "    import lib\n"
+        "    assert not hasattr(lib, 'Node')\n"
+    )}
+    from eval.targets.local import make_held_out_scorer
+    scorer = make_held_out_scorer(held_out)
+    verdict = scorer(repo, ["test_held_out.py::test_renamed"], [])
+    assert verdict.passed is True
+    assert (repo / "test_held_out.py").exists()  # injected, not pre-existing
+
+
+def test_held_out_tests_fail_on_unchanged_base(tmp_path):
+    # A no-op agent must NOT pass: the held-out test fails on the base state.
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "lib.py").write_text("class Node:\n    pass\n")
+
+    held_out = {"test_held_out.py": (
+        "def test_renamed():\n"
+        "    from lib import ASTNode  # noqa: F401\n"
+    )}
+    from eval.targets.local import make_held_out_scorer
+    scorer = make_held_out_scorer(held_out)
+    verdict = scorer(repo, ["test_held_out.py::test_renamed"], [])
+    assert verdict.passed is False
 
 
 def test_ids_must_be_unique():
