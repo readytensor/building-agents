@@ -48,16 +48,25 @@ MODEL = os.environ.get("EVAL_LLM_AGENT_MODEL") or os.environ.get("LLM_AGENT_MODE
 BASE_URL = os.environ.get("EVAL_LLM_BASE_URL") or os.environ.get("LLM_BASE_URL") or ""
 MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 200))
 
-SYSTEM = """You are a coding assistant working inside a real code repository. \
-Use the available tools to investigate, modify, and verify code.
+# The system prompt is COMMON across the episodes and eval: this text is
+# byte-identical to Ep 5's SYSTEM (the episode this agent is built from).
+# Earlier episodes carry the same core minus the sections whose mechanism
+# doesn't exist yet (skills, the plan).
+SYSTEM = """You are a coding assistant operating inside a working copy of a \
+code repository. Use the available tools to investigate, modify, and verify code.
 
 ## Skills
 - Call list_skills() when you start a task, and load_skill(name) for any skill \
 whose description matches the work.
-- If you need a capability you don't currently have, check list_skills first \
-rather than assuming you can't do it.
+- If you need a capability or tool you don't currently have, check list_skills \
+first (a skill may provide it) rather than assuming you can't do the task.
 
-## Verification: REQUIRED whenever you change code
+## Working plan
+- If a plan exists, keep it current: before you produce a final response, \
+update it so completed work is marked completed and any remaining work is \
+accurately reflected.
+
+## Verification: required whenever you change code
 - If your task involved modifying the codebase, you MUST run the project's own \
 test suite with its own runner before your final answer. Scope it to the \
 relevant test files if the full suite is slow.
@@ -80,7 +89,7 @@ your final summary.
 - Delete any scratch files or notes you created, so only the intended change remains.
 
 Ground claims in what you actually observe; don't guess. When the task is \
-complete, stop calling tools and produce a clear summary of what you did."""
+complete, stop calling tools and produce a clear summary of what you did or found."""
 
 
 # Ep 5's bash runs on the host. For SWE-bench instances the runner starts the

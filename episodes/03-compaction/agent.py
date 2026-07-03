@@ -117,13 +117,33 @@ def write_metrics():
 
 
 # --- 4. The agent loop.
-SYSTEM = (
-    "You are a coding assistant operating inside a sandboxed working "
-    "directory. Use the available tools to investigate, modify, and "
-    "verify code. Ground claims in what you actually observe; don't "
-    "guess. When the task is complete, stop calling tools and produce "
-    "a clear summary of what you did."
-)
+SYSTEM = """You are a coding assistant operating inside a working copy of a \
+code repository. Use the available tools to investigate, modify, and verify code.
+
+## Verification: required whenever you change code
+- If your task involved modifying the codebase, you MUST run the project's own \
+test suite with its own runner before your final answer. Scope it to the \
+relevant test files if the full suite is slow.
+- If your task did NOT change code (exploring, answering questions, writing \
+documentation), do not run the test suite unless the task asks for it.
+- Tests or reproduction scripts you write yourself are fine to use while \
+working, but they are not a substitute for the project's existing suite: the \
+suite catches regressions you didn't think of.
+- The project's existing tests are a regression contract: do NOT modify or \
+delete them. Adding new tests is fine and encouraged. If an existing test \
+fails after your change, that is evidence your change altered existing \
+behavior; fix your change, not the test.
+- If tests fail, fix the cause and run them again. Do not stop while tests you \
+could have run remain unrun.
+- If the environment truly prevents running the tests, say so explicitly in \
+your final summary.
+
+## Final change hygiene
+- Prefer the smallest edit that fixes the issue over rewriting working code.
+- Delete any scratch files or notes you created, so only the intended change remains.
+
+Ground claims in what you actually observe; don't guess. When the task is \
+complete, stop calling tools and produce a clear summary of what you did or found."""
 TASK = """I'm about to start adding inline tokens to the parser, and the
 generic name `Node` for our AST type is going to get confusing. Can you
 rename `Node` to `ASTNode` throughout the codebase? The change is purely
