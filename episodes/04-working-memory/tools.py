@@ -149,16 +149,23 @@ def bash(command: str) -> str:
     return output or "(no output)"
 
 
+# Directories that are never task content: VCS internals, caches, build output.
+# list_files and grep both skip them, so their output caps (200 files, 50
+# matches) are spent on real source instead of noise -- on a big repo a
+# vendored build/ tree alone can eat the whole budget.
+SKIP_DIRS = {"__pycache__", ".pytest_cache", ".git", ".venv", ".ruff_cache",
+             "build", "dist", "node_modules", ".tox", ".eggs"}
+
+
 @tool("List files under a path (recursive), one relative path per line — a reliable cross-platform alternative to shell find/ls/dir. Skips caches and VCS dirs.")
 def list_files(path: str = ".") -> str:
     sandbox = SANDBOX.resolve()
     root = _safe_path(path)
     if root.is_file():
         return str(root.relative_to(sandbox))
-    skip = {"__pycache__", ".pytest_cache", ".git", ".venv", ".ruff_cache"}
     files = []
     for p in sorted(root.rglob("*")):
-        if p.is_file() and not any(part in skip for part in p.parts):
+        if p.is_file() and not any(part in SKIP_DIRS for part in p.parts):
             files.append(str(p.relative_to(sandbox)))
             if len(files) >= 200:
                 files.append("... (truncated at 200 files)")
@@ -212,7 +219,7 @@ def edit(path: str, old_string: str, new_string: str, replace_all: bool = False)
     return f"Replaced {count} occurrence(s) in {path}."
 
 
-@tool("Search for a regex pattern under a path. Returns matches as relative/path:line: text.")
+@tool("Search for a regex pattern under a path. Returns matches as relative/path:line: text. Skips caches and VCS dirs.")
 def grep(pattern: str, path: str = ".") -> str:
     try:
         regex = re.compile(pattern)
@@ -223,7 +230,8 @@ def grep(pattern: str, path: str = ".") -> str:
     if root.is_file():
         files = [root]
     else:
-        files = [p for p in root.rglob("*") if p.is_file()]
+        files = [p for p in root.rglob("*")
+                 if p.is_file() and not any(part in SKIP_DIRS for part in p.parts)]
     results = []
     for f in files:
         try:
