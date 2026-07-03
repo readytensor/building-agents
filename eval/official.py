@@ -23,6 +23,7 @@ import json
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from eval.results import append_scoreboard
@@ -131,7 +132,12 @@ def grade_instance(inst_dir, model_name: str, run_id: str = None, runner=run_gra
     inst_dir = Path(inst_dir)
     # The grader keys on the real instance id, not the attempt label.
     iid = _RUN_SUFFIX.sub("", inst_dir.name)
-    run_id = run_id or f"{inst_dir.parent.name}-{inst_dir.name}".replace(".", "-")
+    # The run_id must be unique per invocation: the harness reuses any report
+    # already sitting in the run_id's WSL workdir, so a recycled id silently
+    # returns a PREVIOUS attempt's verdict (this happened: a killed batch and
+    # its rerun shared batch names, and the rerun inherited stale verdicts).
+    run_id = run_id or (f"{inst_dir.parent.name}-{inst_dir.name}-"
+                        f"{time.strftime('%m%d%H%M%S')}").replace(".", "-")
 
     pred = {"instance_id": iid, "model_name_or_path": model_name,
             "model_patch": (inst_dir / "diff.patch").read_text(encoding="utf-8")}
@@ -149,7 +155,7 @@ def grade_instance(inst_dir, model_name: str, run_id: str = None, runner=run_gra
 
 def grade_batch(batch_dir, model_name: str, run_id: str = None, runner=run_grader) -> dict:
     batch_dir = Path(batch_dir)
-    run_id = run_id or batch_dir.name.replace(".", "-")
+    run_id = run_id or f"{batch_dir.name}-{time.strftime('%m%d%H%M%S')}".replace(".", "-")
     predictions = write_predictions(batch_dir, model_name)
     ids = [json.loads(line)["instance_id"]
            for line in predictions.read_text(encoding="utf-8").splitlines()]
