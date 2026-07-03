@@ -47,6 +47,44 @@ def test_write_predictions_uses_first_attempt_only(tmp_path):
     assert all(p["model_name_or_path"] == "test-model" for p in preds)
 
 
+def test_grade_instance_empty_patch_is_unresolved_without_grading(tmp_path, monkeypatch):
+    monkeypatch.setattr(official, "GOLD_BASELINE_DIR", tmp_path / "gold_cache")
+    inst = tmp_path / "batch" / "inst-1"
+    inst.mkdir(parents=True)
+    (inst / "diff.patch").write_text("")  # agent finished without changes
+
+    def exploding_runner(*args):
+        raise AssertionError("the harness must not run for an empty patch")
+
+    verdict = official.grade_instance(inst, "m", runner=exploding_runner)
+    assert verdict["resolved"] is False
+    assert "empty patch" in verdict["note"]
+    assert json.loads((inst / "official.json").read_text())["resolved"] is False
+
+
+def test_grade_batch_skips_empty_patches_but_verdicts_them(tmp_path, monkeypatch):
+    monkeypatch.setattr(official, "GOLD_BASELINE_DIR", tmp_path / "gold_cache")
+    batch = tmp_path / "batch"
+    for label, content in [("inst-1", "a real diff"), ("inst-2", "")]:
+        d = batch / label
+        d.mkdir(parents=True)
+        (d / "diff.patch").write_text(content)
+
+    graded = []
+
+    def fake_runner(predictions, run_id, out_dir, ids):
+        graded.extend(ids)
+        out = Path(out_dir)
+        out.mkdir(parents=True, exist_ok=True)
+        for iid in ids:
+            (out / f"{iid}.json").write_text(json.dumps(_report(iid, [], [], True)))
+
+    summary = official.grade_batch(batch, "m", runner=fake_runner)
+    assert graded.count("inst-2") == 0  # empty patch never reaches the harness
+    assert "inst-2" in summary["unresolved"]
+    assert json.loads((batch / "inst-2" / "official.json").read_text())["resolved"] is False
+
+
 def test_grade_instance_grades_one_sample(tmp_path, monkeypatch):
     monkeypatch.setattr(official, "GOLD_BASELINE_DIR", tmp_path / "gold_cache")
     inst = tmp_path / "batch" / "inst-1"

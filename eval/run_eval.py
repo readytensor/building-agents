@@ -111,6 +111,21 @@ def main(argv=None):
     batch_dir = results_root / stamp
     batch_dir.mkdir(parents=True, exist_ok=True)
 
+    # The manifest is known before anything runs; writing it (and rewriting the
+    # summary after every sample) means a fatal grader/setup failure mid-batch
+    # still leaves a record of what ran and how it scored so far.
+    write_manifest(batch_dir, {
+        "timestamp": stamp, "agent": agent_label, "agent_git_sha": _agent_git_sha(),
+        "model": model_label, "source": args.source, "n": args.n, "repeat": args.repeat,
+        "seed": args.seed, "filters": {"difficulty": args.difficulty, "repo": args.repo},
+        "instance_ids": [i.id for i in picked],
+    })
+
+    def _score_of_record(rows):
+        # With --grade the official verdicts are the numbers of record; without
+        # it, swebench rows stay explicitly ungraded (local pytest is env-noise).
+        return [dict(r, passed=r["official_resolved"]) for r in rows] if args.grade else rows
+
     results = []
     for inst in picked:
         for k in range(args.repeat):
@@ -120,19 +135,12 @@ def main(argv=None):
             if args.grade:
                 result["official_resolved"] = _grade_now(batch_dir / label, model_label)
             results.append(result)
+            scored = _score_of_record(results)
+            write_summary(batch_dir, aggregate(scored, repeat=args.repeat), scored)
 
-    # With --grade the official verdicts are the numbers of record; without it,
-    # swebench rows stay explicitly ungraded (local pytest is env-noise there).
-    if args.grade:
-        results = [dict(r, passed=r["official_resolved"]) for r in results]
+    results = _score_of_record(results)
     agg = aggregate(results, repeat=args.repeat)
     write_summary(batch_dir, agg, results)
-    write_manifest(batch_dir, {
-        "timestamp": stamp, "agent": agent_label, "agent_git_sha": _agent_git_sha(),
-        "model": model_label, "source": args.source, "n": args.n, "repeat": args.repeat,
-        "seed": args.seed, "filters": {"difficulty": args.difficulty, "repo": args.repo},
-        "instance_ids": [i.id for i in picked],
-    })
     append_scoreboard(results_root, {
         "timestamp": stamp, "agent": agent_label, "model": model_label, "source": args.source,
         "n": len(picked), "repeat": args.repeat, "seed": args.seed,

@@ -103,6 +103,19 @@ def _official_verdict(agent: dict, gold: dict) -> dict:
     }
 
 
+def _empty_patch_verdict() -> dict:
+    """An empty patch is a legitimate agent outcome (it finished without
+    changing anything), not an infra failure -- but the official harness skips
+    empty predictions without writing a report. Grade it directly: it can't
+    pass FAIL_TO_PASS, so it is unresolved by definition."""
+    return {
+        "resolved": False, "resolved_raw": False, "f2p_ok": False,
+        "p2p_failures": [], "gold_baseline_failures": [], "beyond_gold": [],
+        "note": "empty patch: the agent made no changes; graded unresolved "
+                "without running the harness",
+    }
+
+
 def _gold_baselines(instance_ids: list, run_id: str, runner) -> dict:
     """Load cached gold baselines; grade the gold patch for any missing ones."""
     GOLD_BASELINE_DIR.mkdir(parents=True, exist_ok=True)
@@ -139,8 +152,13 @@ def grade_instance(inst_dir, model_name: str, run_id: str = None, runner=run_gra
     run_id = run_id or (f"{inst_dir.parent.name}-{inst_dir.name}-"
                         f"{time.strftime('%m%d%H%M%S')}").replace(".", "-")
 
-    pred = {"instance_id": iid, "model_name_or_path": model_name,
-            "model_patch": (inst_dir / "diff.patch").read_text(encoding="utf-8")}
+    patch = (inst_dir / "diff.patch").read_text(encoding="utf-8")
+    if not patch.strip():
+        verdict = _empty_patch_verdict()
+        (inst_dir / "official.json").write_text(json.dumps(verdict, indent=2), encoding="utf-8")
+        return verdict
+
+    pred = {"instance_id": iid, "model_name_or_path": model_name, "model_patch": patch}
     predictions = inst_dir / "predictions.jsonl"
     predictions.write_text(json.dumps(pred) + "\n", encoding="utf-8")
 
@@ -157,19 +175,25 @@ def grade_batch(batch_dir, model_name: str, run_id: str = None, runner=run_grade
     batch_dir = Path(batch_dir)
     run_id = run_id or f"{batch_dir.name}-{time.strftime('%m%d%H%M%S')}".replace(".", "-")
     predictions = write_predictions(batch_dir, model_name)
-    ids = [json.loads(line)["instance_id"]
-           for line in predictions.read_text(encoding="utf-8").splitlines()]
+    preds = [json.loads(line) for line in predictions.read_text(encoding="utf-8").splitlines()]
+    ids = [p["instance_id"] for p in preds]
     if not ids:
         raise SystemExit(f"no diff.patch files found under {batch_dir}")
+    # Empty patches never reach the harness (it writes no report for them);
+    # they grade directly as unresolved.
+    empty = {p["instance_id"] for p in preds if not p["model_patch"].strip()}
+    graded_ids = [i for i in ids if i not in empty]
 
-    gold = _gold_baselines(ids, run_id, runner)
+    gold = _gold_baselines(graded_ids, run_id, runner)
 
     reports_dir = batch_dir / "official_reports"
-    runner(str(predictions), run_id, reports_dir, ids)
+    if graded_ids:
+        runner(str(predictions), run_id, reports_dir, graded_ids)
 
     resolved, unresolved = [], []
     for iid in ids:
-        verdict = _official_verdict(parse_report(reports_dir / f"{iid}.json", iid), gold[iid])
+        verdict = (_empty_patch_verdict() if iid in empty else
+                   _official_verdict(parse_report(reports_dir / f"{iid}.json", iid), gold[iid]))
         (resolved if verdict["resolved"] else unresolved).append(iid)
         (batch_dir / iid / "official.json").write_text(
             json.dumps(verdict, indent=2), encoding="utf-8")
