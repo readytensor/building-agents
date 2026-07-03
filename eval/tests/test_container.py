@@ -44,6 +44,24 @@ def test_exec_activates_conda_env_and_runs_in_testbed():
     assert "activate testbed" in script
     assert "cd /testbed" in script
     assert "pytest -q" in script
+    # The command runs under the container's own `timeout`, so a runaway
+    # process dies inside the container, not just the docker exec client.
+    assert f"timeout -k 5 {container.BASH_TIMEOUT} bash -c" in script
+
+
+def test_exec_reports_in_container_timeout(monkeypatch):
+    captured = {}
+
+    def fake_exec_run(cmd, timeout):
+        captured["host_timeout"] = timeout
+        return ("partial output", 124)  # coreutils timeout's exit code
+
+    monkeypatch.setattr(container, "_exec_run", fake_exec_run)
+    out = container.exec_bash("abc123", "python runaway.py")
+    assert "timed out after 120s inside the container and was killed" in out
+    # The host-side timeout is only a fallback for docker wedging: it fires
+    # after the in-container one, never before.
+    assert captured["host_timeout"] > container.BASH_TIMEOUT
 
 
 def test_stop_clears_active():

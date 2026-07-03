@@ -14,6 +14,7 @@ with it. Grading later uses a fresh, pristine container from the same image.
 All docker invocations go through an injectable `runner` so the module is fully
 testable offline.
 """
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -70,16 +71,24 @@ def _exec_run(cmd: list, timeout: int) -> tuple:
 def exec_bash(container_id: str, command: str, runner=None, timeout: int = BASH_TIMEOUT) -> str:
     """Run one shell command inside the container, in the repo's own
     environment (the images ship a conda env named `testbed`)."""
-    script = f"source /opt/miniconda3/bin/activate testbed && cd /testbed && {command}"
+    # The in-container coreutils `timeout` is the real limit. Timing out the
+    # `docker exec` client host-side kills only the client -- the command
+    # itself would keep running inside the container (the same orphan problem
+    # the host bash tool solves with a process-tree kill), degrading every
+    # later command. -k 5 follows the TERM with a KILL if the command ignores
+    # it; the host-side timeout below is just a fallback for docker itself
+    # wedging, so it fires later.
+    script = (f"source /opt/miniconda3/bin/activate testbed && cd /testbed && "
+              f"timeout -k 5 {timeout} bash -c {shlex.quote(command)}")
     cmd = ["docker", "exec", container_id, "bash", "-c", script]
     if runner is not None:  # injectable path for tests
         return runner(cmd)
 
-    output, returncode = _exec_run(cmd, timeout)
-    if output is None:
-        return (f"Error: command timed out after {timeout}s inside the container. "
-                "Avoid long-running or interactive commands; scope test runs to "
-                "the relevant files.")
+    output, returncode = _exec_run(cmd, timeout + 15)
+    if output is None or returncode == 124:  # 124 = `timeout` expired (killed the command)
+        return (f"Error: command timed out after {timeout}s inside the container "
+                "and was killed. Avoid long-running or interactive commands; "
+                "scope test runs to the relevant files.")
     if len(output) > 20_000:                 # same cap as the host bash tool
         output = output[:20_000] + "\n...[truncated]"
     if returncode:
