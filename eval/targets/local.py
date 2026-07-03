@@ -84,22 +84,13 @@ aren't implemented.
 
 Make sure all existing tests still pass. Keep diffs minimal."""
 
-# Held-out grading test for the rename task (the agent never sees this file;
-# it is injected at scoring time). Fails at baseline: ASTNode doesn't exist yet.
-_EP3_HELD_OUT_TEST = '''\
-def test_ast_class_is_named_astnode():
-    from md2html.parser import ASTNode  # noqa: F401 -- ImportError before the rename
-    import md2html.parser as parser_module
-    assert not hasattr(parser_module, "Node"), "old name Node should be retired"
-'''
-
 DEFAULT_SPECS = [
     {
+        # Success test is held out: eval/held_out/md2html__ep3-rename-astnode/
         "id": "md2html__ep3-rename-astnode",
         "base": _REPO_ROOT / "episodes" / "03-compaction" / "initial",
         "problem_statement": _EP3_TASK,
         "fail_to_pass": ["tests/test_rename.py::test_ast_class_is_named_astnode"],
-        "held_out_tests": {"tests/test_rename.py": _EP3_HELD_OUT_TEST},
     },
     {
         "id": "md2html__ep4-reference-links",
@@ -124,6 +115,21 @@ DEFAULT_SPECS = [
         ],
     },
 ]
+
+
+# Held-out grading files live on disk, keyed by instance id (the repo's usual
+# configuration-as-files idiom, like .skills/<name>/): each file under
+# eval/held_out/<instance-id>/ is injected at its repo-relative path.
+_HELD_OUT_DIR = Path(__file__).resolve().parents[1] / "held_out"
+
+
+def _load_held_out(instance_id: str) -> dict:
+    """{repo-relative-path: content} for an instance's held-out files, or {}."""
+    root = _HELD_OUT_DIR / instance_id
+    if not root.is_dir():
+        return {}
+    return {p.relative_to(root).as_posix(): p.read_text(encoding="utf-8")
+            for p in sorted(root.rglob("*")) if p.is_file()}
 
 
 def make_held_out_scorer(held_out_tests: dict):
@@ -167,7 +173,7 @@ def build_instances(base_dir=None, specs=None) -> list:
         if pass_to_pass is None:
             fail = set(spec["fail_to_pass"])
             pass_to_pass = [n for n in _collect_node_ids(base) if n not in fail]
-        held_out = spec.get("held_out_tests")
+        held_out = spec.get("held_out_tests") or _load_held_out(spec["id"])
         instances.append(Instance(
             id=spec["id"],
             problem_statement=spec["problem_statement"],

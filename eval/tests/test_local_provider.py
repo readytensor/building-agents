@@ -49,6 +49,16 @@ def test_default_specs_are_the_episode_tasks():
     assert len(by_id["md2html__ep6-gfm-trio"].fail_to_pass) == 3
 
 
+def test_held_out_files_are_discovered_by_instance_id():
+    # Held-out grading files live under eval/held_out/<instance-id>/, keyed by
+    # repo-relative path -- the configuration-as-files convention.
+    from eval.targets.local import _load_held_out
+    files = _load_held_out("md2html__ep3-rename-astnode")
+    assert list(files) == ["tests/test_rename.py"]
+    assert "ASTNode" in files["tests/test_rename.py"]
+    assert _load_held_out("no-such-instance") == {}
+
+
 def test_held_out_tests_are_injected_at_scoring_time(tmp_path):
     # Working copy as the agent left it: renamed correctly, no test for it.
     repo = tmp_path / "repo"
