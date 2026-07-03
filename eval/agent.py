@@ -59,9 +59,8 @@ rather than assuming you can't do it.
 
 ## Verification: REQUIRED whenever you change code
 - If your task involved modifying the codebase, you MUST run the project's own \
-test suite with the bash tool before your final answer (for Python projects, \
-typically `python -m pytest <test dir or file> -q`). Scope it to the relevant \
-test files if the full suite is slow.
+test suite with its own runner before your final answer. Scope it to the \
+relevant test files if the full suite is slow.
 - If your task did NOT change code (exploring, answering questions, writing \
 documentation), do not run the test suite unless the task asks for it.
 - Tests or reproduction scripts you write yourself are fine to use while \
