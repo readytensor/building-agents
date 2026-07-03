@@ -8,9 +8,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
-# An agent-under-test: given a working copy and the task text, edit the repo in
-# place and return the unified diff of its changes (the "model_patch").
-SolveFn = Callable[[Path, str], str]
+# An agent-under-test: given a working copy and the task text, edit the repo
+# in place and return "" (the runner captures the diff itself). The working
+# copy is None for container-backed instances, whose workspace is the
+# container's own /testbed.
+SolveFn = Callable[[Optional[Path], str], str]
 
 
 @dataclass
@@ -42,7 +44,10 @@ class Instance:
     success, and a scorer that knows how to run them into a Verdict."""
     id: str
     problem_statement: str
-    repo_dir: Path
+    # The base tree to materialize a host working copy from. None means the
+    # instance is container-backed: its workspace is the container's own
+    # /testbed and nothing exists on the host.
+    repo_dir: Optional[Path]
     fail_to_pass: list
     pass_to_pass: list
     scorer: Callable[..., Verdict]
@@ -54,10 +59,14 @@ class Instance:
     # (e.g. {"difficulty": "<15 min fix", "repo": "pallets/flask"}).
     meta: dict = field(default_factory=dict)
     # Optional execution-environment hook. Called with the materialized working
-    # copy just before the agent runs; returns a teardown callable. The swebench
-    # provider uses this to start the instance's own Docker container (so the
-    # agent's bash runs in the repo's real environment) and stop it afterwards.
-    env_setup: Optional[Callable[[Path], Callable[[], None]]] = None
+    # copy (None for container-backed instances) just before the agent runs;
+    # returns a teardown callable. The swebench provider uses this to start the
+    # instance's own Docker container and stop it afterwards.
+    env_setup: Optional[Callable[[Optional[Path]], Callable[[], None]]] = None
+    # Optional diff-capture hook, used by container-backed instances: the diff
+    # must be extracted from inside the environment BEFORE teardown. None = the
+    # runner diffs the host working copy itself.
+    capture: Optional[Callable[[], str]] = None
 
     def verify(self) -> Verdict:
         return self.scorer(self.repo_dir, self.fail_to_pass, self.pass_to_pass)

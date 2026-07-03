@@ -5,7 +5,9 @@ the episode directory on sys.path, then adapts them for an arbitrary repo:
 
   - tools.SANDBOX is repointed at the instance's working copy (the file tools
     resolve every path against it), so the agent edits the real repo, not
-    episodes/05-skills/sandbox.
+    episodes/05-skills/sandbox. On container runs (SWE-bench) there is no host
+    copy at all: bash AND the file tools execute inside the instance's own
+    container against its /testbed checkout (see container.py).
   - skills._SKILLS_DIR is repointed at eval/skills (generalized for any repo;
     verification runs the repo's own tests rather than md2html-specific coverage).
   - Ep 5's top-level loop is reproduced here as solve(); the initial/->sandbox
@@ -14,7 +16,6 @@ the episode directory on sys.path, then adapts them for an arbitrary repo:
 This module talks to the LLM, so it is exercised only by an explicit smoke run,
 never the automated test suite.
 """
-import functools
 import json
 import os
 import sys
@@ -73,33 +74,20 @@ def bash(command: str) -> str:
     return _host_bash(command)
 
 
-# The container mounts the working copy at /testbed, so every path the model
-# sees in bash output (pytest tracebacks, grep -rl, pwd) is /testbed-rooted.
-# The file tools run on the HOST, resolving paths against that same working
-# copy as host paths -- so a "/testbed/..." path copied straight out of a
-# traceback fails their sandbox check, and the model burns an iteration
-# rediscovering it must use relative paths. Translate the container namespace
-# to the host one at the tool boundary instead.
-def _host_path(path: str) -> str:
-    if path == "/testbed":
-        return "."
-    if path.startswith("/testbed/"):
-        return path[len("/testbed/"):]
-    return path
+# On a container run the agent's whole workspace is the container's own
+# /testbed checkout, so the file tools execute inside it too (identical
+# semantics, via container_fileops piped over docker exec). bash routes itself
+# in the proxy above; on local runs everything falls through to Ep 5's host
+# implementations. The model sees the same tool names and schemas either way.
+_IN_CONTAINER_TOOLS = {"list_files", "read", "write", "edit", "grep"}
 
 
-def _translating(file_tool):
-    """Wrap an Ep 5 file tool so its `path` argument is namespace-translated.
-    Keeps the original name and schema (the model sees no difference) and
-    delegates to the @tool-wrapped original, so telemetry still records
-    exactly one call -- with the path the tool actually resolved."""
-    @functools.wraps(file_tool)
-    def proxy(**kwargs):
-        if isinstance(kwargs.get("path"), str):
-            kwargs["path"] = _host_path(kwargs["path"])
-        return file_tool(**kwargs)
-    proxy.tool_definition = file_tool.tool_definition
-    return proxy
+def _call_tool(by_name, name, args):
+    if container.ACTIVE and name in _IN_CONTAINER_TOOLS:
+        # Same telemetry record the @tool wrapper writes on the host path.
+        tools.TOOL_CALLS.append({"round": tools.CURRENT_ROUND, "tool": name, "args": dict(args)})
+        return container.fileop(container.ACTIVE, name, args)
+    return by_name[name](**args)
 
 
 def _client(base_url):
@@ -114,24 +102,24 @@ def _client(base_url):
 
 
 def solve(repo_dir: Path, problem_statement: str) -> str:
-    """Run the Ep 5 agent over repo_dir with problem_statement as the task.
-    Edits repo_dir in place and returns "" — the runner captures the diff from
-    the repo's git state, keeping diff capture in one place."""
-    # Reset per-run state and repoint the file tools at this instance's working
-    # copy for the whole run. The episodes never reset TOOL_CALLS (one run per
+    """Run the Ep 5 agent with problem_statement as the task. repo_dir is the
+    host working copy to edit in place -- or None on a container run, where
+    the workspace is the container's /testbed and every tool executes inside.
+    Returns "" either way: the runner owns diff capture."""
+    # Reset per-run state. The episodes never reset TOOL_CALLS (one run per
     # process), but a multi-sample batch runs several solves in one process --
     # without the clear, each sample's tool_calls.jsonl would accumulate every
     # earlier sample's calls.
     skills.LOADED_SKILLS.clear()
     skills.LOADED_TOOLS.clear()
     tools.TOOL_CALLS.clear()
-    tools.SANDBOX = Path(repo_dir).resolve()
+    if repo_dir is not None:  # container runs have no host working copy
+        tools.SANDBOX = Path(repo_dir).resolve()
 
     client = _client(BASE_URL)
     # Ep 5's toolset, with its host-only bash swapped for the container-aware
-    # proxy above (same name, same schema shape -- the model sees no difference)
-    # and the file tools wrapped to accept /testbed-rooted paths.
-    file_tools = [bash if t.__name__ == "bash" else _translating(t) for t in tools.TOOLS]
+    # proxy above (same name, same schema shape -- the model sees no difference).
+    file_tools = [bash if t.__name__ == "bash" else t for t in tools.TOOLS]
     base_tools = file_tools + [write_plan, list_skills, load_skill]
     base_by_name = {t.__name__: t for t in base_tools}
 
@@ -166,7 +154,6 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
             if tc.function.name in mechanism_calls:
                 mechanism_calls[tc.function.name] += 1
             try:
-                fn = by_name[tc.function.name]
                 args = json.loads(tc.function.arguments)
                 # Live progress: one short line per tool call, so a background
                 # run can be followed with tail -f on its log.
@@ -175,7 +162,7 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
                     for k, v in args.items()
                 )
                 print(f"[iter {iteration}] {tc.function.name}({preview})", flush=True)
-                result = fn(**args)
+                result = _call_tool(by_name, tc.function.name, args)
             except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
                 result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
                 print(f"[iter {iteration}] ! {result}", flush=True)

@@ -1,9 +1,11 @@
 """The `swebench` provider: SWE-bench Verified instances.
 
 Loads the 500-instance SWE-bench Verified dataset (metadata only, ~25 MB) and
-maps each record into the shared Instance shape. The target repo is cloned
-lazily -- only for instances actually sampled -- and cached under eval/cache/
-keyed by repo + base commit, so repeat runs reuse the checkout.
+maps each record into the shared Instance shape. There is no host checkout at
+all: each instance's prebuilt Docker image already contains the repo at its
+base commit -- installed, built, with the exact frozen dependency set -- so
+the agent works directly on the container's /testbed (env_setup starts it),
+and the diff leaves the container as text (capture) before teardown.
 
 These instances are deliberately NOT scored locally: running the repo's tests
 against the host's (years-newer) dependency set produces noise, not signal.
@@ -11,14 +13,9 @@ The verdict of record is official SWE-bench Docker grading -- per sample via
 run_eval --grade, or per batch via eval.official.
 """
 import json
-import subprocess
-from pathlib import Path
 
 from eval import container
 from eval.targets import Instance, Verdict
-
-# Where lazy clones live: eval/cache/<org__repo>/<base_commit>/ (gitignored).
-CACHE_DIR = Path(__file__).resolve().parents[1] / "cache"
 
 DATASET = "princeton-nlp/SWE-bench_Verified"
 
@@ -35,20 +32,7 @@ def _load_dataset_records():
     return list(load_dataset(DATASET, split="test"))
 
 
-def clone_at_commit(url: str, commit: str, dest: Path) -> Path:
-    """Clone `url` and check out `commit` at dest. Idempotent: an existing
-    checkout (dest/.git present) is trusted as the cache hit."""
-    if (dest / ".git").exists():
-        return dest
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "clone", "-q", url, str(dest)],
-                   check=True, capture_output=True, text=True)
-    subprocess.run(["git", "-C", str(dest), "checkout", "-q", commit],
-                   check=True, capture_output=True, text=True)
-    return dest
-
-
-def _ungraded_scorer(repo_dir: Path, fail_to_pass: list, pass_to_pass: list) -> Verdict:
+def _ungraded_scorer(repo_dir, fail_to_pass: list, pass_to_pass: list) -> Verdict:
     """SWE-bench instances are NOT scored locally: host-side pytest against a
     years-old dependency set produces noise, not signal (imports fail, warning
     filters differ). The verdict of record comes from official Docker grading.
@@ -59,37 +43,34 @@ def _ungraded_scorer(repo_dir: Path, fail_to_pass: list, pass_to_pass: list) -> 
     ))
 
 
-def to_instance(record: dict, cache_dir: Path = CACHE_DIR) -> Instance:
+def to_instance(record: dict) -> Instance:
     """Map one Verified record to an Instance. FAIL_TO_PASS / PASS_TO_PASS come
-    as JSON-encoded string lists in the dataset. The clone is deferred to
-    prepare(), so building 500 Instances stays free."""
-    repo = record["repo"]                      # e.g. "pallets/flask"
-    commit = record["base_commit"]
-    repo_dir = Path(cache_dir) / repo.replace("/", "__") / commit
-    url = f"https://github.com/{repo}.git"
+    as JSON-encoded string lists in the dataset. repo_dir is None: the working
+    copy is the instance image's own /testbed, entered via env_setup."""
     return Instance(
         id=record["instance_id"],
         problem_statement=record["problem_statement"],
-        repo_dir=repo_dir,
+        repo_dir=None,
         fail_to_pass=json.loads(record["FAIL_TO_PASS"]),
         pass_to_pass=json.loads(record["PASS_TO_PASS"]),
         scorer=_ungraded_scorer,
-        prepare=lambda: clone_at_commit(url, commit, repo_dir),
-        meta={"difficulty": record.get("difficulty", ""), "repo": repo},
-        env_setup=lambda work_dir, iid=record["instance_id"]: _container_env(iid, work_dir),
+        meta={"difficulty": record.get("difficulty", ""), "repo": record["repo"]},
+        env_setup=lambda work_dir, iid=record["instance_id"]: _container_env(iid),
+        # ACTIVE is safe here: the runner captures before teardown, and the
+        # eval agent runs one instance at a time (documented in container.py).
+        capture=lambda: container.capture_diff(container.ACTIVE),
     )
 
 
-def _container_env(instance_id: str, work_dir: Path):
-    """Start the instance's own container (agent bash runs in the repo's real
-    environment); return the teardown that stops it."""
-    cid = container.start(instance_id, work_dir)
+def _container_env(instance_id: str):
+    """Start the instance's own container (the agent's whole workspace); return
+    the teardown that stops it."""
+    cid = container.start(instance_id)
     return lambda: container.stop(cid)
 
 
 def get_instances() -> list:
-    """Provider entry point used by the CLI: all 500 Verified instances,
-    clone-on-demand."""
+    """Provider entry point used by the CLI: all 500 Verified instances."""
     if _load_dataset_records is None:  # test seam for the no-datasets path
         raise RuntimeError("pip install datasets")
     records = _load_dataset_records()

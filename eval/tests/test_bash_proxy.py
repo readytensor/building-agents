@@ -25,8 +25,8 @@ def test_bash_falls_back_to_host_when_no_container(monkeypatch, tmp_path):
     assert "host-side" in out
 
 
-def test_swebench_verify_is_ungraded_not_local_pytest(tmp_path):
-    inst = swebench.to_instance(FAKE_RECORD, cache_dir=tmp_path)
+def test_swebench_verify_is_ungraded_not_local_pytest():
+    inst = swebench.to_instance(FAKE_RECORD)
     v = inst.verify()  # must not run pytest at all -- instant, explicit
     assert v.passed is False
     assert "ungraded" in v.details.lower()

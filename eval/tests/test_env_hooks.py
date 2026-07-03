@@ -42,11 +42,11 @@ def test_teardown_runs_even_when_solve_raises(base_repo, tmp_path):
     assert events == ["teardown"]
 
 
-def test_swebench_env_setup_starts_and_stops_container(tmp_path, monkeypatch):
+def test_swebench_env_setup_starts_and_stops_container(monkeypatch):
     calls = []
-    monkeypatch.setattr(swebench.container, "start", lambda iid, wd: calls.append(("start", iid)) or "cid1")
+    monkeypatch.setattr(swebench.container, "start", lambda iid: calls.append(("start", iid)) or "cid1")
     monkeypatch.setattr(swebench.container, "stop", lambda cid: calls.append(("stop", cid)))
-    inst = swebench.to_instance(FAKE_RECORD, cache_dir=tmp_path)
-    teardown = inst.env_setup(tmp_path / "work")
+    inst = swebench.to_instance(FAKE_RECORD)
+    teardown = inst.env_setup(None)  # container-backed: no host working copy
     teardown()
     assert calls == [("start", "demo__demo-1"), ("stop", "cid1")]

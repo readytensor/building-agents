@@ -29,21 +29,27 @@ def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path, run_label:
     inst_dir.mkdir(parents=True, exist_ok=True)
 
     if instance.prepare is not None:
-        instance.prepare()  # e.g. clone the repo at its base commit (cached)
-    work = materialize(instance.repo_dir, inst_dir / "repo")
-    scored = replace(instance, repo_dir=work)  # verify() must score the working copy
+        instance.prepare()  # e.g. fetch an expensive base state (cached)
+    if instance.repo_dir is not None:
+        work = materialize(instance.repo_dir, inst_dir / "repo")
+        scored = replace(instance, repo_dir=work)  # verify() must score the working copy
+    else:
+        # Container-backed instance: the workspace is the container's own
+        # /testbed; there is nothing to materialize on the host.
+        work, scored = None, instance
 
     # If the provider supplies an execution environment (e.g. the instance's
     # Docker container), stand it up around the agent run and always tear it
-    # down -- even when the agent crashes.
+    # down -- even when the agent crashes. The diff is captured inside the
+    # try: a container-backed instance's changes die with its container.
     teardown = instance.env_setup(work) if instance.env_setup else None
     start = time.monotonic()
     try:
         solve(work, instance.problem_statement)
+        diff = instance.capture() if instance.capture else capture_diff(work)
     finally:
         if teardown:
             teardown()
-    diff = capture_diff(work)
     verdict = scored.verify()
     elapsed = round(time.monotonic() - start, 3)
 

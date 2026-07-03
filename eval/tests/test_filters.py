@@ -40,6 +40,6 @@ def test_no_filters_returns_pool_unchanged():
     assert filter_pool(POOL) == POOL
 
 
-def test_swebench_instance_carries_meta(tmp_path):
-    inst = to_instance(FAKE_RECORD, cache_dir=tmp_path)
+def test_swebench_instance_carries_meta():
+    inst = to_instance(FAKE_RECORD)
     assert inst.meta == {"difficulty": "<15 min fix", "repo": "demo/demo"}

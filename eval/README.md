@@ -10,19 +10,21 @@ API calls):
 
     python -m pytest eval/tests -q
 
-A real run of the reference agent over SWE-bench Verified instances, grading
-each sample officially right after it runs (needs `pip install datasets`, plus
-Docker and WSL for the per-instance containers and grading):
+A real run of the reference agent over SWE-bench Verified instances (needs
+`pip install datasets`, plus Docker and WSL). The agent works directly inside
+each instance's official container image, on its own `/testbed` checkout with
+the repo's real frozen environment; each sample is graded officially right
+after it runs:
 
-    python -m eval.run_eval --source swebench --n 5 --grade
+    python -m eval.run_eval --source swebench --n 5
 
 Useful flags:
 
 - `--n N` how many instances to sample
 - `--id <instance-id>` run one specific instance
 - `--difficulty {easy,medium,hard}` filter by Verified's time-to-fix bucket
-- `--grade` officially grade each sample right after it runs (solve, grade,
-  next sample), so a broken setup surfaces at the first sample
+- `--no-grade` skip the per-sample official grading (on by default for
+  swebench; grading a sample right away surfaces a broken setup at sample 1)
 - `--repeat K` run each sampled instance K times (for pass@k and variance)
 - `--seed S` reproducible sampling
 - `--keep {none,failures,all}` how much per-instance log detail to retain

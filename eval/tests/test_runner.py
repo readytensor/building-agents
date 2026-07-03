@@ -2,7 +2,7 @@ import json
 
 from eval.runner import run_instance
 from eval.scoring import score_pytest
-from eval.targets import Instance
+from eval.targets import Instance, Verdict
 from eval.tests.conftest import FAIL_TO_PASS, PASS_TO_PASS
 
 
@@ -57,3 +57,26 @@ def test_runner_does_not_mutate_the_base_repo(base_repo, tmp_path, solvers):
     run_instance(inst, solvers["fixing"], tmp_path / "batch", run_label="calc__add")
     # The base repo's calc.py must remain broken; the agent edits a working copy.
     assert "return a - b" in (base_repo / "calc.py").read_text()
+
+
+def test_container_backed_instance_has_no_host_copy_and_captures_before_teardown(tmp_path):
+    events = []
+    inst = Instance(
+        id="demo__demo-1", problem_statement="fix it", repo_dir=None,
+        fail_to_pass=["t::a"], pass_to_pass=[],
+        scorer=lambda repo_dir, f2p, p2p: Verdict(details="ungraded"),
+        env_setup=lambda work: (events.append(("setup", work)),
+                                lambda: events.append(("teardown",)))[1],
+        capture=lambda: events.append(("capture",)) or "the diff",
+    )
+
+    def solver(repo_dir, task):
+        assert repo_dir is None  # nothing on the host to point the agent at
+        return ""
+
+    run_instance(inst, solver, tmp_path / "batch", run_label="demo__demo-1")
+    inst_dir = tmp_path / "batch" / "demo__demo-1"
+    assert not (inst_dir / "repo").exists()  # no materialized working copy
+    assert (inst_dir / "diff.patch").read_text() == "the diff"
+    # The diff must be extracted while the container is still alive.
+    assert events == [("setup", None), ("capture",), ("teardown",)]
