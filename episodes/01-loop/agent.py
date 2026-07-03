@@ -132,13 +132,9 @@ BASH_TOOL = {
 }
 
 # --- 4. The agent loop.
-SYSTEM = (
-    "You are a coding assistant operating inside a sandboxed working "
-    "directory. Use the available tools to investigate, modify, and "
-    "verify code. Ground claims in what you actually observe; don't "
-    "guess. When the task is complete, stop calling tools and produce "
-    "a clear answer."
-)
+# The system prompt lives in system_prompt.md next to this file: prompt text is
+# configuration, not loop logic. Its core is shared verbatim by every episode.
+SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
 # Two tasks for the same agent. The agent is identical; only this string changes.
 # The first asks it to summarize the project; the second asks it to write a README.
 # To try the second, comment out the first TASK and uncomment the second.

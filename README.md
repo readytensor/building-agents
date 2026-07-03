@@ -54,9 +54,10 @@ python agent.py
 building-agents/
 ├── episodes/
 │   ├── 01-loop/
-│   │   ├── agent.py      # the episode's agent: start here
-│   │   ├── initial/      # pristine starting copy of the example project
-│   │   └── sandbox/      # where the agent works (recreated every run)
+│   │   ├── agent.py           # the episode's agent: start here
+│   │   ├── system_prompt.md   # the agent's system prompt (prompt text is config, not code)
+│   │   ├── initial/           # pristine starting copy of the example project
+│   │   └── sandbox/           # where the agent works (recreated every run)
 │   ├── 02-tools/
 │   ├── 03-compaction/
 │   ├── 04-working-memory/
@@ -65,6 +66,7 @@ building-agents/
 ├── examples/
 │   ├── md2html/             # the FINISHED tool (every feature) you build up to
 │   └── about-the-series.md  # a sample document that exercises every feature
+├── eval/                # evaluation harness: the agent on SWE-bench Verified + the episode tasks
 ├── run.py               # optional harness to record a run (see below)
 ├── capture.py           # terminal recorder used by run.py --capture
 ├── requirements.txt
@@ -72,6 +74,10 @@ building-agents/
 ```
 
 Each episode is **self-contained**: `cd` into it and run `python agent.py`. No branch switching.
+
+**`system_prompt.md`.** Each episode's system prompt is a markdown file next to `agent.py`, loaded in one line. The prompt shares a common core across every episode; later episodes add only the section for the mechanism they introduce (a plan section in Episode 4, a skills section in Episode 5). Diff two of them to see exactly what an episode taught the agent.
+
+**`eval/`.** A separate harness that runs the finished agent against real problems: SWE-bench Verified instances (with official Docker grading) and the series' own episode tasks. See [`eval/README.md`](./eval/README.md).
 
 **`initial/` → `sandbox/`.** Every `agent.py` begins by wiping `sandbox/` and copying `initial/` into it, so each run starts from an identical clean state. `initial/` is never modified; the agent only works inside `sandbox/`. After a run, see what it changed:
 

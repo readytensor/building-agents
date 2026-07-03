@@ -59,7 +59,13 @@ logs/
 # .html is a build artifact. Scoped to the top of examples/ so it does NOT touch the
 # committed test fixtures under examples/md2html/tests/fixtures/*.html.
 examples/*.html
+# Eval harness generated results (scoreboard + per-batch artifacts).
+# Note: eval/fixtures/ is NOT ignored -- it holds the md2html base trees the
+# local provider reads as input, so it ships with the repo.
+eval/results/
 # IDE / editor
 .vscode/
 .idea/
 *.swp
+# SWE-bench lazy repo clones (cached checkouts, fetched on demand)
+eval/cache/

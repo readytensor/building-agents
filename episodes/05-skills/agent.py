@@ -152,18 +152,10 @@ def write_metrics():
 
 
 # --- 5. The agent loop.
-SYSTEM = (
-    "You are a coding assistant operating inside a sandboxed working "
-    "directory. Use the available tools to investigate, modify, and "
-    "verify code. You also have skills you can load on demand: call "
-    "list_skills() to see what's available, and load_skill(name) when one "
-    "matches your task. If you need a capability or tool you don't "
-    "currently have, check list_skills first (a skill may provide it) "
-    "rather than assuming you can't do the task. Ground claims in what "
-    "you actually observe; don't guess. "
-    "When the task is complete, stop calling tools and produce a clear "
-    "summary of what you did."
-)
+# The system prompt lives in system_prompt.md next to this file: prompt text is
+# configuration, not loop logic. Its core is shared verbatim by every episode;
+# this episode's copy adds the Skills section (the mechanism built here).
+SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
 
 TASK = """I want to add support for GitHub-flavored alerts to md2html.
 They look like this:

@@ -96,13 +96,9 @@ def write_metrics():
 
 
 # --- 4. The agent loop. Identical to Ep 1 except for the dispatch by tool name.
-SYSTEM = (
-    "You are a coding assistant operating inside a sandboxed working "
-    "directory. Use the available tools to investigate, modify, and "
-    "verify code. Ground claims in what you actually observe; don't "
-    "guess. When the task is complete, stop calling tools and produce "
-    "a clear answer."
-)
+# The system prompt lives in system_prompt.md next to this file: prompt text is
+# configuration, not loop logic. Its core is shared verbatim by every episode.
+SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
 # The task: write a README. This continues Ep 1's second task -- only now the
 # agent has real file tools, so the file lands in a single write() call instead
 # of the many shell-escaping workarounds the bash-only agent needed in Ep 1.

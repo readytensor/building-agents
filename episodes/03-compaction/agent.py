@@ -117,13 +117,9 @@ def write_metrics():
 
 
 # --- 4. The agent loop.
-SYSTEM = (
-    "You are a coding assistant operating inside a sandboxed working "
-    "directory. Use the available tools to investigate, modify, and "
-    "verify code. Ground claims in what you actually observe; don't "
-    "guess. When the task is complete, stop calling tools and produce "
-    "a clear summary of what you did."
-)
+# The system prompt lives in system_prompt.md next to this file: prompt text is
+# configuration, not loop logic. Its core is shared verbatim by every episode.
+SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
 TASK = """I'm about to start adding inline tokens to the parser, and the
 generic name `Node` for our AST type is going to get confusing. Can you
 rename `Node` to `ASTNode` throughout the codebase? The change is purely

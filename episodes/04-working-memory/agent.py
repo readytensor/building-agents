@@ -130,15 +130,10 @@ def write_metrics():
 
 
 # --- 5. The agent loop.
-SYSTEM = (
-    "You are a coding assistant operating inside a sandboxed working "
-    "directory. Use the available tools to investigate, modify, and "
-    "verify code. Ground claims in what you actually observe; don't "
-    "guess. Before you produce a final response, if a plan exists, update "
-    "it so completed work is marked completed and any remaining work is "
-    "accurately reflected. When the task is complete, stop calling tools "
-    "and produce a clear summary of what you did."
-)
+# The system prompt lives in system_prompt.md next to this file: prompt text is
+# configuration, not loop logic. Its core is shared verbatim by every episode;
+# this episode's copy adds the Working plan section (the mechanism built here).
+SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
 TASK = """I want to add support for reference-style links to our markdown
 library. They look like this:
 
