@@ -14,6 +14,7 @@ the episode directory on sys.path, then adapts them for an arbitrary repo:
 This module talks to the LLM, so it is exercised only by an explicit smoke run,
 never the automated test suite.
 """
+import functools
 import json
 import os
 import sys
@@ -72,6 +73,35 @@ def bash(command: str) -> str:
     return _host_bash(command)
 
 
+# The container mounts the working copy at /testbed, so every path the model
+# sees in bash output (pytest tracebacks, grep -rl, pwd) is /testbed-rooted.
+# The file tools run on the HOST, resolving paths against that same working
+# copy as host paths -- so a "/testbed/..." path copied straight out of a
+# traceback fails their sandbox check, and the model burns an iteration
+# rediscovering it must use relative paths. Translate the container namespace
+# to the host one at the tool boundary instead.
+def _host_path(path: str) -> str:
+    if path == "/testbed":
+        return "."
+    if path.startswith("/testbed/"):
+        return path[len("/testbed/"):]
+    return path
+
+
+def _translating(file_tool):
+    """Wrap an Ep 5 file tool so its `path` argument is namespace-translated.
+    Keeps the original name and schema (the model sees no difference) and
+    delegates to the @tool-wrapped original, so telemetry still records
+    exactly one call -- with the path the tool actually resolved."""
+    @functools.wraps(file_tool)
+    def proxy(**kwargs):
+        if isinstance(kwargs.get("path"), str):
+            kwargs["path"] = _host_path(kwargs["path"])
+        return file_tool(**kwargs)
+    proxy.tool_definition = file_tool.tool_definition
+    return proxy
+
+
 def _client(base_url):
     def api_key_for(url):
         by_provider = {"anthropic": "ANTHROPIC_API_KEY", "openrouter": "OPENROUTER_API_KEY",
@@ -99,8 +129,9 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
 
     client = _client(BASE_URL)
     # Ep 5's toolset, with its host-only bash swapped for the container-aware
-    # proxy above (same name, same schema shape -- the model sees no difference).
-    file_tools = [bash if t.__name__ == "bash" else t for t in tools.TOOLS]
+    # proxy above (same name, same schema shape -- the model sees no difference)
+    # and the file tools wrapped to accept /testbed-rooted paths.
+    file_tools = [bash if t.__name__ == "bash" else _translating(t) for t in tools.TOOLS]
     base_tools = file_tools + [write_plan, list_skills, load_skill]
     base_by_name = {t.__name__: t for t in base_tools}
 

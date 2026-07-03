@@ -3,7 +3,7 @@
     python -m eval.run_eval --source local --n 5 --repeat 3
     python -m eval.run_eval --source local --id md2html__alerts
     python -m eval.run_eval --source local --agent fake-fixing --n 1   # token-free smoke
-    python -m eval.run_eval --source swebench --n 5 --grade   # solve -> grade -> next
+    python -m eval.run_eval --source swebench --n 5   # grades each sample as it lands (--no-grade to skip)
 
 The agent-under-test is selectable: `--agent ep5` (default, the real reference
 agent) or a fake adapter for token-free testing. Providers supply instances;
@@ -85,10 +85,11 @@ def main(argv=None):
                    help="filter by Verified's time-to-fix bucket before sampling")
     p.add_argument("--repo", default=None, help="filter by repo substring, e.g. flask")
     p.add_argument("--seed", type=int, default=0)
-    p.add_argument("--grade", action="store_true",
+    p.add_argument("--grade", action=argparse.BooleanOptionalAction, default=None,
                    help="officially grade each sample right after it runs (solve -> "
                         "grade -> next sample), so a broken setup surfaces after the "
-                        "first sample, not after the whole batch. swebench only.")
+                        "first sample, not after the whole batch. Default: ON for "
+                        "swebench (--no-grade opts out); unavailable for local.")
     p.add_argument("--keep", choices=["none", "failures", "all"], default="failures")
     p.add_argument("--results-root", default="eval/results")
     p.add_argument("--timestamp", default=None, help="override batch id (tests use this)")
@@ -97,6 +98,8 @@ def main(argv=None):
     solve, agent_label, model_label = _select_agent(args.agent)
     if args.grade and args.source != "swebench":
         raise SystemExit("--grade needs --source swebench (official grading only exists there)")
+    if args.grade is None:  # unset: official verdicts are the default where they exist
+        args.grade = args.source == "swebench"
     instances = filter_pool(_load_instances(args.source),
                             difficulty=args.difficulty, repo=args.repo)
     picked = sample(instances, n=args.n, seed=args.seed, instance_id=args.instance_id)
