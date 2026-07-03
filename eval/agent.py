@@ -67,6 +67,10 @@ documentation), do not run the test suite unless the task asks for it.
 - Tests or reproduction scripts you write yourself are fine to use while \
 working, but they are not a substitute for the project's existing suite: the \
 suite catches regressions you didn't think of.
+- The project's existing tests are a regression contract: do NOT modify or \
+delete them. Adding new tests is fine and encouraged. If an existing test \
+fails after your change, that is evidence your change altered existing \
+behavior; fix your change, not the test.
 - If tests fail, fix the cause and run them again. Do not stop while tests you \
 could have run remain unrun.
 - If the environment truly prevents running the tests, say so explicitly in \
