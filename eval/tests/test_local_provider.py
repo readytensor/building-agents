@@ -28,6 +28,25 @@ def test_build_instances_produces_wellformed_instances(tmp_path):
     assert callable(inst.scorer)
 
 
+def test_default_specs_are_the_episode_tasks():
+    # The real seeded pool: Eps 3-6 tasks over their pristine initial/ trees.
+    # Collects each tree's suite (subprocess pytest --collect-only, no LLM).
+    instances = build_instances()
+    by_id = {i.id: i for i in instances}
+    assert set(by_id) == {
+        "md2html__ep3-rename-astnode", "md2html__ep4-reference-links",
+        "md2html__ep5-github-alerts", "md2html__ep6-gfm-trio",
+    }
+    for inst in instances:
+        assert inst.repo_dir.is_dir(), f"{inst.id}: base tree missing"
+        # Each tree's suite has 40+ tests; a tiny count means collection broke.
+        assert len(inst.pass_to_pass) >= 40, f"{inst.id}: suspiciously few P2P ids"
+        assert not set(inst.fail_to_pass) & set(inst.pass_to_pass)
+    # The failing fixture tests are pinned per episode (ep3 has none: rename).
+    assert by_id["md2html__ep3-rename-astnode"].fail_to_pass == []
+    assert len(by_id["md2html__ep6-gfm-trio"].fail_to_pass) == 3
+
+
 def test_ids_must_be_unique():
     specs = [
         {"id": "dup", "problem_statement": "", "fail_to_pass": [], "pass_to_pass": []},

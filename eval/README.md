@@ -27,10 +27,11 @@ Useful flags:
 - `--seed S` reproducible sampling
 - `--keep {none,failures,all}` how much per-instance log detail to retain
 
-The `local` provider (`--source local`) is md2html-task scaffolding: its
-`DEFAULT_SPECS` list in `eval/targets/local.py` is empty until real md2html
-instances are seeded, so it currently selects no instances. The test suite
-exercises it with synthetic specs.
+The `local` provider (`--source local`) runs the series' own episode tasks
+(Eps 3-6) over each episode's pristine `initial/` md2html tree, scored by
+running that tree's pytest suite directly (no Docker needed):
+
+    python -m eval.run_eval --source local --n 4
 
 ## Results
 
