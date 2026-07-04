@@ -4,6 +4,8 @@ silent retries), and a dead Docker engine fed error strings to the model
 instead of failing the worker. A stalled worker must die loudly and quickly:
 the dispatcher already reports worker failures and the batch resumes.
 """
+import json
+
 import pytest
 
 from eval import container
@@ -62,3 +64,41 @@ def test_stop_tolerates_an_already_gone_container():
     container.ACTIVE = "abc123"
     container.stop("abc123", runner=dead_runner)  # must not raise
     assert container.ACTIVE is None
+
+
+class _FlakyClient:
+    """chat.completions.create raises `failures` times, then returns 'ok'."""
+
+    def __init__(self, failures, exc=None):
+        self.failures = failures
+        self.exc = exc or json.JSONDecodeError("Expecting value", "<html>", 0)
+        self.calls = 0
+        self.chat = self
+        self.completions = self
+
+    def create(self, **kwargs):
+        self.calls += 1
+        if self.calls <= self.failures:
+            raise self.exc
+        return "ok"
+
+
+def test_llm_retry_recovers_from_transient_garbage():
+    # One malformed 200 in ~45 samples (django-15268): worth 2 retries before
+    # dying. The waits are injected so the test doesn't sleep 40s.
+    from eval.agent import LLM_RETRY_WAIT, _chat_with_retry
+    client, waits = _FlakyClient(failures=2), []
+    resp = _chat_with_retry(client, sleep=waits.append, model="m", messages=[])
+    assert resp == "ok"
+    assert client.calls == 3
+    assert waits == [LLM_RETRY_WAIT, LLM_RETRY_WAIT]
+
+
+def test_llm_retry_fails_loudly_after_three_attempts():
+    # A systematically broken provider must still kill the worker (the
+    # Nemotron lesson): bounded attempts, then the dispatcher records it.
+    from eval.agent import _chat_with_retry
+    client = _FlakyClient(failures=99)
+    with pytest.raises(json.JSONDecodeError):
+        _chat_with_retry(client, sleep=lambda s: None, model="m", messages=[])
+    assert client.calls == 3

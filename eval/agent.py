@@ -19,10 +19,11 @@ never the automated test suite.
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import APIError, OpenAI
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _EP5 = _REPO_ROOT / "episodes" / "05-skills"
@@ -122,6 +123,28 @@ def _client(base_url):
                   timeout=120.0, max_retries=2)
 
 
+# 1 original attempt + 2 retries, 20s apart. Roughly one call in every ~45
+# samples' worth of traffic comes back as a 200 whose body is not JSON (seen
+# live on django-15268: JSONDecodeError killed the worker 30 iterations in);
+# the SDK retries HTTP-level failures, but a garbage 200 sails past that.
+# Bounded on purpose -- a systematically broken provider (the Nemotron free-
+# tier lesson) must still fail loudly, and the dispatcher records it.
+LLM_ATTEMPTS = 3
+LLM_RETRY_WAIT = 20  # seconds
+
+
+def _chat_with_retry(client, sleep=time.sleep, **kwargs):
+    for attempt in range(1, LLM_ATTEMPTS + 1):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except (json.JSONDecodeError, APIError) as e:
+            if attempt == LLM_ATTEMPTS:
+                raise
+            print(f"[llm] {type(e).__name__} on attempt {attempt}/{LLM_ATTEMPTS}, "
+                  f"retrying in {LLM_RETRY_WAIT}s", flush=True)
+            sleep(LLM_RETRY_WAIT)
+
+
 def solve(repo_dir: Path, problem_statement: str) -> str:
     """Run the Ep 5 agent with problem_statement as the task. repo_dir is the
     host working copy to edit in place -- or None on a container run, where
@@ -160,7 +183,7 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
         by_name = {**base_by_name, **skills.LOADED_TOOLS}
         tool_defs = [fn.tool_definition for fn in by_name.values()]
 
-        resp = client.chat.completions.create(model=MODEL, messages=messages, tools=tool_defs)
+        resp = _chat_with_retry(client, model=MODEL, messages=messages, tools=tool_defs)
         # Some providers (notably OpenRouter's free tiers) omit usage on some
         # responses; count what's reported rather than crashing the run.
         if resp.usage is not None:
