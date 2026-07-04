@@ -10,6 +10,7 @@ def _seed_instance(batch_dir, label, passed):
     (inst / "metrics.json").write_text("{}")
     (inst / "tool_calls.jsonl").write_text("{}")
     (inst / "final_message.md").write_text("done")
+    (inst / "transcript.json").write_text("[]")
     return {"inst_dir": str(inst), "passed": passed}
 
 
@@ -22,12 +23,15 @@ def test_failures_keep_gzipped_verbose_passes_drop_it(tmp_path):
     # Passing instance: verbose gone, always-keep artifacts remain.
     assert not (batch / "ok" / "output.log").exists()
     assert not (batch / "ok" / "output.log.gz").exists()
+    assert not (batch / "ok" / "transcript.json").exists()
     assert (batch / "ok" / "verify.json").exists()
     assert (batch / "ok" / "diff.patch").exists()
 
-    # Failing instance: verbose gzipped.
+    # Failing instance: verbose gzipped (the transcript too: it is the full
+    # message history, megabytes per run).
     assert not (batch / "bad" / "output.log").exists()
     assert (batch / "bad" / "output.log.gz").exists()
+    assert (batch / "bad" / "transcript.json.gz").exists()
     assert (batch / "bad" / "verify.json").exists()
 
     # metrics and the final message survive raw for BOTH outcomes: analysis

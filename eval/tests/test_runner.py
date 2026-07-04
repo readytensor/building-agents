@@ -44,6 +44,7 @@ def test_runner_collects_agent_telemetry_files(base_repo, tmp_path, solvers, mon
         (tmp_path / "tool_calls.jsonl").write_text('{"tool": "bash"}\n')
         (tmp_path / "metrics.json").write_text('{"agents": []}')
         (tmp_path / "final_message.md").write_text("all done")
+        (tmp_path / "transcript.json").write_text('[{"role": "system"}]')
         return ""
 
     inst = _make_instance(base_repo)
@@ -51,6 +52,7 @@ def test_runner_collects_agent_telemetry_files(base_repo, tmp_path, solvers, mon
     assert (tmp_path / "batch" / "calc__add" / "tool_calls.jsonl").exists()
     assert (tmp_path / "batch" / "calc__add" / "metrics.json").exists()
     assert (tmp_path / "batch" / "calc__add" / "final_message.md").exists()
+    assert (tmp_path / "batch" / "calc__add" / "transcript.json").exists()
     assert not (tmp_path / "tool_calls.jsonl").exists()  # moved, not copied
 
 

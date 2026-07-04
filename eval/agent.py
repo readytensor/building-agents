@@ -199,6 +199,11 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
                   if m.get("role") == "assistant"), "")
     with open("final_message.md", "w", encoding="utf-8") as f:
         f.write(final)
+    # The full message history, verbatim: every model turn, every complete
+    # tool result, the post-compaction state. tool_calls.jsonl excerpts are
+    # the quick-scan layer; this is the replay-anything layer.
+    with open("transcript.json", "w", encoding="utf-8") as f:
+        json.dump(messages, f, indent=2)
     # Same recording split as the episodes: the agent writes raw counters, the
     # harness owns collection/reporting. The runner moves this into the batch dir.
     metrics = {
