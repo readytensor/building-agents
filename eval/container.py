@@ -59,6 +59,21 @@ def start(instance_id: str, runner=_run) -> str:
     return cid
 
 
+# Docker-level failures, as opposed to failures of the command run inside:
+# the container vanished or the engine is unreachable (e.g. the WSL VM died
+# under the batch). Returning these to the model as tool output burns tokens
+# on an unrecoverable state -- the worker must fail loudly instead; the
+# dispatcher records it and the batch resumes later.
+_ENGINE_DEAD = ("No such container", "Error response from daemon: Container",
+                "Cannot connect to the Docker daemon", "error during connect")
+
+
+def _check_engine(output: str) -> None:
+    for marker in _ENGINE_DEAD:
+        if marker in output:
+            raise RuntimeError(f"container/engine gone: {output[-500:]}")
+
+
 def _exec_run(cmd: list, timeout: int) -> tuple:
     """Real executor for exec_bash: returns (output, returncode). Non-zero exit
     is a normal outcome (a failing test run), not an error."""
@@ -91,6 +106,8 @@ def exec_bash(container_id: str, command: str, runner=None, timeout: int = BASH_
         return (f"Error: command timed out after {timeout}s inside the container "
                 "and was killed. Avoid long-running or interactive commands; "
                 "scope test runs to the relevant files.")
+    if returncode:
+        _check_engine(output)  # docker-level failure: crash, don't converse
     if len(output) > 20_000:                 # same cap as the host bash tool
         output = output[:20_000] + "\n...[truncated]"
     if returncode:
@@ -122,6 +139,7 @@ def fileop(container_id: str, op: str, kwargs: dict, runner=None, timeout: int =
     except subprocess.TimeoutExpired:
         return f"Error: {op} timed out after {timeout}s."
     if proc.returncode:
+        _check_engine(proc.stderr or proc.stdout)  # docker-level failure: crash
         return f"Error: {op} failed in the container: {(proc.stderr or proc.stdout)[-1000:]}"
     return proc.stdout
 
@@ -143,9 +161,13 @@ def capture_diff(container_id: str, runner=_run) -> str:
 
 
 def stop(container_id: str, runner=_run) -> None:
-    """Remove the container (it is --rm'd anyway on stop). Clears ACTIVE."""
+    """Remove the container (it is --rm'd anyway on stop). Clears ACTIVE.
+    Tolerates a container that is already gone: teardown runs in a finally,
+    where raising would mask the failure that killed the run."""
     global ACTIVE
     try:
         runner(["docker", "rm", "-f", container_id])
+    except RuntimeError:
+        pass
     finally:
         ACTIVE = None

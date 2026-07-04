@@ -114,7 +114,12 @@ def _client(base_url):
             if fragment in url:
                 return os.environ.get(key_var)
         return os.environ.get("OPENAI_API_KEY")
-    return OpenAI(api_key=api_key_for(base_url), base_url=base_url or None)
+    # Bounded waits, learned the hard way: the SDK's defaults (600s timeout,
+    # silent retries) let a stalled provider wedge a worker for 30+ minutes
+    # with no output. 120s per attempt x 3 attempts caps the silence at ~6
+    # minutes; the worker then dies loudly and the dispatcher records it.
+    return OpenAI(api_key=api_key_for(base_url), base_url=base_url or None,
+                  timeout=120.0, max_retries=2)
 
 
 def solve(repo_dir: Path, problem_statement: str) -> str:
