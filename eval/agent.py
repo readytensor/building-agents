@@ -82,6 +82,15 @@ def bash(command: str) -> str:
 _IN_CONTAINER_TOOLS = {"list_files", "read", "write", "edit", "grep"}
 
 
+def _excerpt(text: str, edge: int = 300) -> str:
+    """Head AND tail of a long output: the head holds the session header or
+    first error, the tail holds the verdict (pytest totals, the traceback's
+    exception line, the appended exit code). Short outputs stay verbatim."""
+    if len(text) <= 2 * edge:
+        return text
+    return text[:edge] + "\n...[snip]...\n" + text[-edge:]
+
+
 def _call_tool(by_name, name, args):
     if container.ACTIVE and name in _IN_CONTAINER_TOOLS:
         # Same telemetry record the @tool wrapper writes on the host path.
@@ -93,7 +102,7 @@ def _call_tool(by_name, name, args):
     # is often explained by the output the model saw). Every tool is @tool-
     # wrapped, so the record this call appended is the last one; tag it.
     if tools.TOOL_CALLS:
-        tools.TOOL_CALLS[-1]["result_tail"] = str(result)[-500:]
+        tools.TOOL_CALLS[-1]["result_excerpt"] = _excerpt(str(result))
     return result
 
 
