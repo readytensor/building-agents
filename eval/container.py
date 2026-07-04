@@ -145,9 +145,18 @@ def fileop(container_id: str, op: str, kwargs: dict, runner=None, timeout: int =
 
 
 # What never belongs in a model_patch: caches and build artifacts the agent's
-# own exploration creates inside /testbed (pip install -e ., in-tree rebuilds).
+# own exploration creates inside /testbed (pip install -e ., in-tree rebuilds),
+# and test-run droppings (coverage runs, pytest caches, patch-attempt
+# leftovers). The coverage entries are load-bearing: a binary .coverage file
+# in django-11400's patch made the official grader's `git apply` abort, so
+# the tests silently ran against an UNPATCHED tree and the failure report
+# overstated the miss (6/6 F2P "failed" vs 4/6 actually passing).
 _DIFF_EXCLUDES = [":(exclude)*.pyc", ":(exclude)__pycache__", ":(exclude)*.egg-info",
-                  ":(exclude).eggs", ":(exclude)*.so", ":(exclude)build"]
+                  ":(exclude).eggs", ":(exclude)*.so", ":(exclude)build",
+                  ":(exclude).coverage", ":(exclude).coverage.*",
+                  ":(exclude)htmlcov", ":(exclude)coverage.xml",
+                  ":(exclude).pytest_cache", ":(exclude).hypothesis",
+                  ":(exclude)*.orig", ":(exclude)*.rej"]
 
 
 def capture_diff(container_id: str, base_commit: str = None, runner=_run) -> str:

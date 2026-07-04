@@ -94,6 +94,11 @@ def test_capture_diff_stages_then_diffs_before_teardown():
     assert "add" in calls[0] and "-A" in calls[0]        # new files enter the diff
     assert "--cached" in calls[1]
     assert any("exclude" in part for part in calls[1])   # build junk stays out
+    # Coverage artifacts are load-bearing excludes: a binary .coverage in the
+    # patch aborted the official grader's `git apply` (django-11400), so the
+    # tests ran against an unpatched tree and the report was corrupted.
+    assert ":(exclude).coverage" in calls[1]
+    assert ":(exclude).pytest_cache" in calls[1]
 
 
 def test_capture_diff_targets_base_commit_not_head():
