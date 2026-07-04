@@ -132,3 +132,27 @@ def test_worker_failure_is_reported_not_scored(tmp_path):
     assert summary["aggregate"]["n_instances"] == 1
     assert not (tmp_path / "results" / "scoreboard.jsonl").exists()
     assert result["exit_code"] == 1
+
+
+def test_disk_floor_stops_new_workers_and_blocks_scoreboard(tmp_path):
+    # Below the floor nothing spawns: a full disk kills the WSL VM under
+    # Docker (the 2026-07-03 crash), so refusing the worker is the safe move.
+    ids = ["repo__a", "repo__b"]
+    result, spawn_calls, _ = _run(tmp_path, ids, free_gb=lambda p: 5.0)
+    assert spawn_calls == []
+    assert result["skipped"] == ids
+    assert result["exit_code"] == 1
+    assert not (tmp_path / "results" / "scoreboard.jsonl").exists()
+
+
+def test_disk_floor_lets_running_workers_finish(tmp_path):
+    # Disk drops under the floor after the first spawn: the in-flight worker
+    # runs to completion (its result counts); the rest are skipped unrun.
+    ids = ["repo__a", "repo__b", "repo__c"]
+    reads = iter([100.0, 5.0, 5.0, 5.0])
+    result, spawn_calls, _ = _run(tmp_path, ids, workers=1,
+                                  free_gb=lambda p: next(reads))
+    assert [c["iid"] for c in spawn_calls] == ["repo__a"]
+    assert [r["id"] for r in result["results"]] == ["repo__a"]
+    assert result["skipped"] == ["repo__b", "repo__c"]
+    assert result["exit_code"] == 1

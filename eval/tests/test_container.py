@@ -102,3 +102,24 @@ def test_stop_clears_active():
     container.stop("abc123", runner=lambda cmd: calls.append(cmd) or "")
     assert container.ACTIVE is None
     assert calls[0][:3] == ["docker", "rm", "-f"]
+
+
+def test_remove_image_removes_the_instance_image():
+    calls = []
+
+    def fake_run(cmd):
+        calls.append(cmd)
+        return ""
+
+    assert container.remove_image("pallets__flask-5014", runner=fake_run) is True
+    assert calls == [["docker", "rmi",
+                      "swebench/sweb.eval.x86_64.pallets_1776_flask-5014:latest"]]
+
+
+def test_remove_image_tolerates_failure():
+    # Image already gone / still in use: cleanup only costs disk, it must
+    # never raise into a finished sample.
+    def fake_run(cmd):
+        raise RuntimeError("No such image")
+
+    assert container.remove_image("pallets__flask-5014", runner=fake_run) is False

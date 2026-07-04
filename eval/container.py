@@ -171,3 +171,20 @@ def stop(container_id: str, runner=_run) -> None:
         pass
     finally:
         ACTIVE = None
+
+
+def remove_image(instance_id: str, runner=_run) -> bool:
+    """Drop an instance's image once its sample is fully done (solved AND
+    graded) -- nothing touches it again. Without per-sample removal a batch
+    accumulates every image it ever pulled (~1-3GB each) until the disk, and
+    the WSL VM under Docker with it, dies (the 2026-07-03 batch crash). With
+    it, disk scales with the in-flight set, not the batch size. Layers shared
+    with another still-present image survive: docker only deletes layers
+    nothing references. Failure to remove (image in use, already gone) only
+    costs disk, so it is reported, never raised -- cleanup must not kill a
+    finished sample."""
+    try:
+        runner(["docker", "rmi", image_for(instance_id)])
+        return True
+    except (RuntimeError, subprocess.TimeoutExpired):
+        return False

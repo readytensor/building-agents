@@ -64,6 +64,18 @@ def _grade_now(inst_dir, model_label) -> bool:
     return verdict["resolved"]
 
 
+def _cleanup_image(instance_id) -> None:
+    """--clean-images path: drop the instance's image once its sample is fully
+    done, so a batch's disk footprint stays at the in-flight set instead of
+    growing with every sample (the 2026-07-03 batch died of a full disk). The
+    next same-repo instance may re-pull shared layers -- bandwidth, not disk.
+    A failed removal is reported and tolerated: it only costs disk."""
+    from eval import container  # lazy: mirrors _grade_now, needs Docker only here
+    ok = container.remove_image(instance_id)
+    state = "removed" if ok else "removal FAILED (image kept)"
+    print(f"[eval] {instance_id}: instance image {state}", flush=True)
+
+
 def _agent_git_sha():
     try:
         return subprocess.run(
@@ -90,6 +102,12 @@ def main(argv=None):
                         "grade -> next sample), so a broken setup surfaces after the "
                         "first sample, not after the whole batch. Default: ON for "
                         "swebench (--no-grade opts out); unavailable for local.")
+    p.add_argument("--clean-images", action=argparse.BooleanOptionalAction, default=None,
+                   help="remove each instance's Docker image once the sample is fully "
+                        "done (solved + graded), so batch disk use stays at the "
+                        "in-flight set instead of growing per sample. Default: ON for "
+                        "swebench (--no-clean-images keeps images, e.g. to re-enter a "
+                        "container while debugging); unavailable for local.")
     p.add_argument("--keep", choices=["none", "failures", "all"], default="failures")
     p.add_argument("--results-root", default="eval/results")
     p.add_argument("--timestamp", default=None, help="override batch id (tests use this)")
@@ -100,6 +118,10 @@ def main(argv=None):
         raise SystemExit("--grade needs --source swebench (official grading only exists there)")
     if args.grade is None:  # unset: official verdicts are the default where they exist
         args.grade = args.source == "swebench"
+    if args.clean_images and args.source != "swebench":
+        raise SystemExit("--clean-images needs --source swebench (only its instances have images)")
+    if args.clean_images is None:  # unset: cleanup is the default where images exist
+        args.clean_images = args.source == "swebench"
     instances = filter_pool(_load_instances(args.source),
                             difficulty=args.difficulty, repo=args.repo)
     picked = sample(instances, n=args.n, seed=args.seed, instance_id=args.instance_id)
@@ -137,6 +159,10 @@ def main(argv=None):
             results.append(result)
             scored = _score_of_record(results)
             write_summary(batch_dir, aggregate(scored, repeat=args.repeat), scored)
+        # After ALL repeats of this instance: earlier removal would force the
+        # next repeat to re-pull the image it just deleted.
+        if args.clean_images:
+            _cleanup_image(inst.id)
 
     results = _score_of_record(results)
     agg = aggregate(results, repeat=args.repeat)

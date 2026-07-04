@@ -23,10 +23,17 @@ complete (run_eval writes it after grading) and is not re-run, so a killed
 batch picks up where it left off. A failed worker is an infra failure, not an
 agent failure: it is excluded from the aggregate and blocks the consolidated
 scoreboard row until a re-run completes the batch.
+
+Disk floor: no new worker starts with less than MIN_FREE_GB free. A full disk
+does not fail politely -- it killed the WSL VM under Docker mid-batch on
+2026-07-03 and every in-flight worker hung forever. Skipped instances are
+left unrun (resume after freeing space); like failures, they block the
+scoreboard row.
 """
 import argparse
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -35,6 +42,14 @@ from pathlib import Path
 from eval.results import aggregate, append_scoreboard, write_summary
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+
+# Enough headroom for K in-flight instance images (~1-3GB each) plus one
+# pull's transient (compressed + extracted layers coexist briefly).
+MIN_FREE_GB = 20
+
+
+def _free_gb(path: Path) -> float:
+    return shutil.disk_usage(path).free / 1e9
 
 
 def _worker_cmd(iid: str, batch_dir: Path, source: str, agent: str, keep: str) -> list:
@@ -65,9 +80,10 @@ def _collect_result(batch_dir: Path, iid: str) -> dict:
 
 def run_dispatch(ids: list, *, batch_dir: Path, results_root: Path,
                  source: str = "swebench", agent: str = "ep5", keep: str = "all",
-                 workers: int = 3, spawn=_spawn, sleep=time.sleep) -> dict:
+                 workers: int = 3, spawn=_spawn, sleep=time.sleep,
+                 free_gb=_free_gb) -> dict:
     """Run every id to completion (skipping ones already complete), at most
-    `workers` at a time. Returns {results, failed, exit_code}."""
+    `workers` at a time. Returns {results, failed, skipped, exit_code}."""
     batch_dir = Path(batch_dir)
     batch_dir.mkdir(parents=True, exist_ok=True)
 
@@ -80,9 +96,18 @@ def run_dispatch(ids: list, *, batch_dir: Path, results_root: Path,
     env["PYTHONPATH"] = str(_REPO_ROOT) + (
         os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
 
-    running, failed = {}, []  # iid -> Popen-like
+    running, failed, skipped = {}, [], []  # running: iid -> Popen-like
     while queue or running:
         while queue and len(running) < workers:
+            free = free_gb(batch_dir)
+            if free < MIN_FREE_GB:
+                skipped += queue
+                queue.clear()
+                print(f"[dispatch] DISK LOW: {free:.0f} GB free is under the "
+                      f"{MIN_FREE_GB} GB floor -- not starting new workers, "
+                      f"{len(skipped)} instance(s) left unrun (running workers "
+                      "continue). Free space and re-run to resume.", flush=True)
+                break
             iid = queue.pop(0)
             cwd = batch_dir / "_cwd" / iid
             cwd.mkdir(parents=True, exist_ok=True)
@@ -112,7 +137,8 @@ def run_dispatch(ids: list, *, batch_dir: Path, results_root: Path,
 
     # One scoreboard row for the whole batch, and only for a complete one: a
     # partial rate on the board would masquerade as a full run's number.
-    if not failed and results:
+    # Disk-skipped instances make the batch just as incomplete as failed ones.
+    if not failed and not skipped and results:
         manifest = json.loads(
             (batch_dir / results[0]["id"] / "manifest.json").read_text(encoding="utf-8"))
         agg = aggregate(results, repeat=1)
@@ -125,7 +151,8 @@ def run_dispatch(ids: list, *, batch_dir: Path, results_root: Path,
             "mean_seconds": agg["mean_seconds"], "batch_dir": str(batch_dir),
         })
 
-    return {"results": results, "failed": failed, "exit_code": 1 if failed else 0}
+    return {"results": results, "failed": failed, "skipped": skipped,
+            "exit_code": 1 if failed or skipped else 0}
 
 
 def main(argv=None):
@@ -147,7 +174,8 @@ def main(argv=None):
                        agent=args.agent, keep=args.keep, workers=args.workers)
     agg = aggregate(out["results"], repeat=1) if out["results"] else {"pass_at_1": 0.0}
     print(f"[dispatch] complete: {len(out['results'])}/{len(args.ids)} instances, "
-          f"pass@1={agg['pass_at_1']:.1%}, {len(out['failed'])} worker failures", flush=True)
+          f"pass@1={agg['pass_at_1']:.1%}, {len(out['failed'])} worker failures, "
+          f"{len(out['skipped'])} skipped (disk)", flush=True)
     return out["exit_code"]
 
 

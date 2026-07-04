@@ -119,3 +119,11 @@ def test_partial_summary_survives_a_fatal_grading_failure(tmp_path, monkeypatch)
     partial = json.loads((batch / "summary.json").read_text())
     assert partial["aggregate"]["n_instances"] == 1
     assert partial["instances"][0]["passed"] is True
+
+
+def test_clean_images_rejected_for_local_source(tmp_path):
+    with pytest.raises(SystemExit, match="--clean-images needs --source swebench"):
+        run_eval.main([
+            "--source", "local", "--agent", "fake-fixing", "--clean-images",
+            "--results-root", str(tmp_path / "results"),
+        ])
