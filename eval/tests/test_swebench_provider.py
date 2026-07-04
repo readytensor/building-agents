@@ -35,14 +35,17 @@ def test_instance_is_container_backed_with_no_host_state():
     assert callable(inst.capture)  # diff leaves the container as text
 
 
-def test_capture_diffs_the_active_container(monkeypatch):
+def test_capture_diffs_the_active_container_against_base_commit(monkeypatch):
     monkeypatch.setattr(swebench.container, "ACTIVE", "cid9")
     calls = []
-    monkeypatch.setattr(swebench.container, "capture_diff",
-                        lambda cid: calls.append(cid) or "THE DIFF")
+    monkeypatch.setattr(
+        swebench.container, "capture_diff",
+        lambda cid, base_commit=None: calls.append((cid, base_commit)) or "THE DIFF")
     inst = swebench.to_instance(FAKE_RECORD)
     assert inst.capture() == "THE DIFF"
-    assert calls == ["cid9"]
+    # The record's base_commit pins the diff target: an in-container
+    # `git commit` must not be able to empty the captured patch.
+    assert calls == [("cid9", "abc123")]
 
 
 def test_get_instances_without_datasets_gives_install_hint(monkeypatch):

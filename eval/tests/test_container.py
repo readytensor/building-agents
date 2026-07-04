@@ -96,6 +96,25 @@ def test_capture_diff_stages_then_diffs_before_teardown():
     assert any("exclude" in part for part in calls[1])   # build junk stays out
 
 
+def test_capture_diff_targets_base_commit_not_head():
+    # An agent that runs `git commit` in-container moves HEAD past its own
+    # work; a HEAD-relative diff then captures NOTHING (matplotlib-25332 lost
+    # a correct, verified fix this way). Diffing against the pinned base sha
+    # is commit-proof.
+    calls = []
+
+    def fake_run(cmd):
+        calls.append(cmd)
+        return "THE DIFF" if "diff" in cmd else ""
+
+    diff = container.capture_diff("abc123", base_commit="deadbeef", runner=fake_run)
+    assert diff == "THE DIFF"
+    diff_cmd = calls[1]
+    assert "deadbeef" in diff_cmd
+    # The sha is the diff target (before the `--` pathspec separator).
+    assert diff_cmd.index("deadbeef") < diff_cmd.index("--")
+
+
 def test_stop_clears_active():
     calls = []
     container.ACTIVE = "abc123"

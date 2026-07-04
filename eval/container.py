@@ -150,14 +150,21 @@ _DIFF_EXCLUDES = [":(exclude)*.pyc", ":(exclude)__pycache__", ":(exclude)*.egg-i
                   ":(exclude).eggs", ":(exclude)*.so", ":(exclude)build"]
 
 
-def capture_diff(container_id: str, runner=_run) -> str:
+def capture_diff(container_id: str, base_commit: str = None, runner=_run) -> str:
     """The model_patch: everything the agent changed at /testbed since the
     image's base_commit, captured with one exec BEFORE teardown (the changes
     die with the container). Staging first makes new files show up in the
-    diff; the patch text is the only artifact that leaves."""
+    diff; the patch text is the only artifact that leaves.
+
+    The diff target is the instance's base_commit, NOT HEAD: an agent that
+    runs `git commit` inside the container moves HEAD past its own work, and
+    a HEAD-relative diff captures an empty patch (matplotlib-25332: a correct,
+    fully verified fix was lost exactly this way). Diffing the staged tree
+    against the pinned base sha is commit-proof."""
     runner(["docker", "exec", container_id, "git", "-C", "/testbed", "add", "-A"])
+    target = [base_commit] if base_commit else []
     return runner(["docker", "exec", container_id, "git", "-C", "/testbed",
-                   "diff", "--cached", "--", ".", *_DIFF_EXCLUDES])
+                   "diff", "--cached", *target, "--", ".", *_DIFF_EXCLUDES])
 
 
 def stop(container_id: str, runner=_run) -> None:

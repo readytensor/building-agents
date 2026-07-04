@@ -58,7 +58,10 @@ def to_instance(record: dict) -> Instance:
         env_setup=lambda work_dir, iid=record["instance_id"]: _container_env(iid),
         # ACTIVE is safe here: the runner captures before teardown, and the
         # eval agent runs one instance at a time (documented in container.py).
-        capture=lambda: container.capture_diff(container.ACTIVE),
+        # base_commit pins the diff target so an in-container `git commit`
+        # can't launder the agent's work into an empty patch.
+        capture=lambda bc=record["base_commit"]: container.capture_diff(
+            container.ACTIVE, base_commit=bc),
     )
 
 
