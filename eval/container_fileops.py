@@ -168,7 +168,8 @@ def _sig(node) -> str:
     args += [a.arg for a in node.args.kwonlyargs]
     if node.args.kwarg:
         args.append("**" + node.args.kwarg.arg)
-    return f"def {node.name}({', '.join(args)})"
+    prefix = "async " if isinstance(node, ast.AsyncFunctionDef) else ""
+    return f"{prefix}def {node.name}({', '.join(args)})"
 
 
 def _walk_pruned(top: Path):
@@ -201,7 +202,7 @@ def repo_map(root: Path, path: str = ".") -> str:
 
 def _map_overview(rootr: Path) -> str:
     lines = []
-    readmes = sorted(p.name for p in rootr.glob("README*"))
+    readmes = sorted(p.name for p in rootr.glob("README*") if p.is_file())
     lines.append("README: " + (", ".join(readmes) if readmes else "(none found)"))
     top_files = sorted(p.name for p in rootr.iterdir() if p.is_file())
     shown = ", ".join(top_files[:_TOPFILE_CAP])

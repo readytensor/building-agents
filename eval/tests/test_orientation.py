@@ -116,3 +116,44 @@ def test_output_is_hard_capped(tmp_path):
     out = cf.repo_map(tmp_path)
     assert len(out) <= cf._MAP_CHAR_CAP + 100
     assert "map truncated" in out
+
+
+def test_subtree_caps_files_and_signature_lines(tmp_path):
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    for i in range(cf._FILE_CAP + 5):
+        (pkg / f"m{i:03d}.py").write_text("def f():\n    pass\n", encoding="utf-8")
+    out = cf.repo_map(tmp_path, "pkg")
+    assert "5 more modules not shown" in out
+
+
+def test_subtree_truncates_at_sig_cap(tmp_path):
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    body = "".join(f"def f{i:04d}():\n    pass\n" for i in range(cf._SIG_CAP + 10))
+    (pkg / "big.py").write_text(body, encoding="utf-8")
+    out = cf.repo_map(tmp_path, "pkg")
+    assert f"truncated at {cf._SIG_CAP} lines" in out
+
+
+def test_testbed_paths_are_accepted(tmp_path):
+    # The container-facing contract: models copy /testbed/... paths from
+    # shell output; _safe_path translates them.
+    repo = _make_repo(tmp_path)
+    out = cf.repo_map(repo, "/testbed/pkg")
+    assert "class Foo(Base)" in out
+
+
+def test_a_directory_named_readme_is_not_readme_evidence(tmp_path):
+    (tmp_path / "README").mkdir()
+    (tmp_path / "somefile.txt").write_text("", encoding="utf-8")
+    out = cf.repo_map(tmp_path)
+    assert "README: (none found)" in out
+
+
+def test_async_functions_are_labeled(tmp_path):
+    pkg = tmp_path / "pkg"
+    pkg.mkdir()
+    (pkg / "aio.py").write_text("async def go(x):\n    pass\n", encoding="utf-8")
+    out = cf.repo_map(tmp_path, "pkg")
+    assert "async def go(x)" in out
