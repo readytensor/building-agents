@@ -14,7 +14,9 @@ difference between a local host run and a container run.
 It is also a plain importable module, which is how the offline tests exercise
 it: dispatch(payload, root=some_tmp_dir).
 """
+import ast
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -121,7 +123,162 @@ def grep(root: Path, pattern: str, path: str = ".") -> str:
     return "\n".join(results) if results else f"No matches for {pattern!r}."
 
 
-_OPS = {"list_files": list_files, "read": read, "write": write, "edit": edit, "grep": grep}
+# ---------------------------------------------------------------------------
+# repo_map: a generated orientation map of the repository (stdlib ast only).
+#
+# Level 1 (path "." or omitted) answers "what is this project?": the README
+# and runner-config files that exist, the package tree with module counts and
+# __init__ docstring one-liners, and where the tests live. It reports
+# EVIDENCE, not conclusions -- choosing the test command is the model's job.
+# Level 2 (path=<subdir>) answers "what is in here?": per-module class and
+# function signatures, for orienting inside a package before editing it.
+# ---------------------------------------------------------------------------
+
+_DIR_CAP = 150       # level-1 package-tree lines before truncation
+_TEST_CAP = 30       # level-1 test-location lines
+_TOPFILE_CAP = 30    # level-1 top-level file names
+_FILE_CAP = 40       # level-2 modules per call
+_SIG_CAP = 400       # level-2 signature lines
+_MAP_CHAR_CAP = 8_000  # hard cap on any map: the root map rides in EVERY
+                       # turn's system prompt, so size discipline matters
+_RUNNER_FILES = ("tox.ini", "pytest.ini", "setup.cfg", "pyproject.toml",
+                 "noxfile.py", "Makefile", "runtests.py")
+
+
+def _parse(path: Path):
+    """ast.parse a source file, or None if it doesn't parse (a repo can
+    legitimately contain broken or version-specific files)."""
+    try:
+        return ast.parse(path.read_text(encoding="utf-8", errors="replace"))
+    except SyntaxError:
+        return None
+
+
+def _first_doc_line(tree) -> str:
+    doc = (ast.get_docstring(tree) or "").strip()
+    return doc.splitlines()[0][:100] if doc else ""
+
+
+def _sig(node) -> str:
+    """A compact one-line signature: argument names only (no annotations or
+    defaults -- orientation, not documentation)."""
+    args = [a.arg for a in node.args.posonlyargs + node.args.args]
+    if node.args.vararg:
+        args.append("*" + node.args.vararg.arg)
+    args += [a.arg for a in node.args.kwonlyargs]
+    if node.args.kwarg:
+        args.append("**" + node.args.kwarg.arg)
+    return f"def {node.name}({', '.join(args)})"
+
+
+def _walk_pruned(top: Path):
+    """os.walk with junk and hidden directories pruned DURING the walk (mutating
+    dirnames in place stops the descent) -- rglob-then-filter would still crawl
+    all of .git or node_modules on a big repo. Sorted for stable output."""
+    for cur, dirnames, filenames in os.walk(top):
+        dirnames[:] = sorted(d for d in dirnames
+                             if d not in SKIP_DIRS and not d.startswith("."))
+        yield Path(cur), sorted(filenames)
+
+
+def _mapped_dirs(rootr: Path) -> list:
+    """Every directory under root that directly holds .py files."""
+    return [d for d, files in _walk_pruned(rootr)
+            if d != rootr and any(f.endswith(".py") for f in files)]
+
+
+def repo_map(root: Path, path: str = ".") -> str:
+    top = _safe_path(root, path)
+    if not top.is_dir():
+        return f"Error: {path} is not a directory."
+    rootr = root.resolve()
+    out = _map_overview(rootr) if top == rootr else _map_subtree(rootr, top)
+    if len(out) > _MAP_CHAR_CAP:
+        out = out[:_MAP_CHAR_CAP] + ("\n... (map truncated; call "
+                                     "repo_map(path=...) on a subtree)")
+    return out
+
+
+def _map_overview(rootr: Path) -> str:
+    lines = []
+    readmes = sorted(p.name for p in rootr.glob("README*"))
+    lines.append("README: " + (", ".join(readmes) if readmes else "(none found)"))
+    top_files = sorted(p.name for p in rootr.iterdir() if p.is_file())
+    shown = ", ".join(top_files[:_TOPFILE_CAP])
+    if len(top_files) > _TOPFILE_CAP:
+        shown += f", ... (+{len(top_files) - _TOPFILE_CAP} more)"
+    lines.append("Top-level files: " + (shown if top_files else "(none)"))
+    runner = [n for n in _RUNNER_FILES if (rootr / n).exists()]
+    runner += [str(p.relative_to(rootr)).replace("\\", "/")
+               for p in sorted(rootr.glob("*/runtests.py"))]
+    if runner:
+        lines.append("Test/build config found: " + ", ".join(runner))
+    lines.append("")
+    lines.append("Package tree (directories with Python modules; one-liners from __init__.py):")
+    dirs = _mapped_dirs(rootr)
+    test_dirs = []
+    for i, d in enumerate(dirs):
+        rel = str(d.relative_to(rootr)).replace("\\", "/")
+        if d.name.startswith("test") or (d / "conftest.py").exists():
+            test_dirs.append(rel)
+        if i >= _DIR_CAP:
+            continue  # past the print cap; keep collecting test locations
+        n = sum(1 for f in d.iterdir() if f.is_file() and f.suffix == ".py")
+        doc = ""
+        init = d / "__init__.py"
+        if init.exists():
+            tree = _parse(init)
+            doc = _first_doc_line(tree) if tree else ""
+        lines.append(f"  {rel}/ ({n} modules)" + (f" -- {doc}" if doc else ""))
+    if len(dirs) > _DIR_CAP:
+        lines.append(f"  ... ({len(dirs) - _DIR_CAP} more directories; "
+                     "call repo_map(path=...) to inspect one)")
+    lines.append("")
+    lines.append("Test locations (test* directories or a conftest.py):")
+    if test_dirs:
+        lines += [f"  {t}/" for t in test_dirs[:_TEST_CAP]]
+        if len(test_dirs) > _TEST_CAP:
+            lines.append(f"  ... ({len(test_dirs) - _TEST_CAP} more)")
+    else:
+        lines.append("  (none found)")
+    return "\n".join(lines)
+
+
+def _map_subtree(rootr: Path, top: Path) -> str:
+    files = [d / f for d, names in _walk_pruned(top)
+             for f in names if f.endswith(".py")]
+    if not files:
+        return f"No Python modules under {str(top.relative_to(rootr))}."
+    lines = []
+    for f in files[:_FILE_CAP]:
+        rel = str(f.relative_to(rootr)).replace("\\", "/")
+        tree = _parse(f)
+        if tree is None:
+            lines.append(f"{rel} (could not parse)")
+            continue
+        doc = _first_doc_line(tree)
+        lines.append(rel + (f" -- {doc}" if doc else ""))
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                lines.append(f"  {_sig(node)}")
+            elif isinstance(node, ast.ClassDef):
+                bases = ", ".join(b.id for b in node.bases if isinstance(b, ast.Name))
+                lines.append(f"  class {node.name}({bases})" if bases
+                             else f"  class {node.name}")
+                for sub in node.body:
+                    if isinstance(sub, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        lines.append(f"    {_sig(sub)}")
+        if len(lines) >= _SIG_CAP:
+            lines.append(f"... (truncated at {_SIG_CAP} lines; "
+                         "call repo_map on a deeper path)")
+            break
+    if len(files) > _FILE_CAP:
+        lines.append(f"... ({len(files) - _FILE_CAP} more modules not shown)")
+    return "\n".join(lines)
+
+
+_OPS = {"list_files": list_files, "read": read, "write": write, "edit": edit,
+        "grep": grep, "repo_map": repo_map}
 
 
 def dispatch(payload: dict, root: Path = ROOT) -> str:
