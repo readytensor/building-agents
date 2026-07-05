@@ -157,3 +157,54 @@ def test_async_functions_are_labeled(tmp_path):
     (pkg / "aio.py").write_text("async def go(x):\n    pass\n", encoding="utf-8")
     out = cf.repo_map(tmp_path, "pkg")
     assert "async def go(x)" in out
+
+
+# --- agent wiring (eval/agent.py) -----------------------------------------
+# Importing eval.agent is offline-safe (test_bash_proxy.py precedent): it
+# builds an OpenAI client only inside solve().
+
+def test_repo_map_tool_routes_to_container(monkeypatch):
+    from eval import agent, container
+    seen = {}
+
+    def fake_fileop(cid, op, kwargs):
+        seen["call"] = (cid, op, kwargs)
+        return "MAPPED"
+
+    monkeypatch.setattr(container, "ACTIVE", "cid123")
+    monkeypatch.setattr(container, "fileop", fake_fileop)
+    assert agent.repo_map.__wrapped__("pkg") == "MAPPED"
+    assert seen["call"] == ("cid123", "repo_map", {"path": "pkg"})
+
+
+def test_repo_map_tool_host_path(tmp_path, monkeypatch):
+    from eval import agent, container
+    import tools  # episodes/05-skills, put on sys.path by eval.agent
+    monkeypatch.setattr(container, "ACTIVE", None)
+    monkeypatch.setattr(tools, "SANDBOX", tmp_path)
+    (tmp_path / "README.md").write_text("# hi\n", encoding="utf-8")
+    out = agent.repo_map.__wrapped__(".")
+    assert "README: README.md" in out
+
+
+def test_system_with_repo_map_injects_and_is_a_noop_when_empty(monkeypatch):
+    from eval import agent
+    monkeypatch.setattr(agent, "REPO_MAP", "THE MAP")
+    out = agent.system_with_repo_map("BASE")
+    assert out.startswith("BASE")
+    assert "[REPOSITORY MAP]" in out and "THE MAP" in out
+    monkeypatch.setattr(agent, "REPO_MAP", "")
+    assert agent.system_with_repo_map("BASE") == "BASE"
+
+
+def test_generate_repo_map_swallows_errors(tmp_path, monkeypatch):
+    from eval import agent, container
+    import tools
+    monkeypatch.setattr(container, "ACTIVE", None)
+    monkeypatch.setattr(tools, "SANDBOX", tmp_path / "does-not-exist")
+    assert agent._generate_repo_map() == ""  # error string -> no injection
+
+
+def test_repo_map_is_in_the_toolset():
+    from eval import agent
+    assert agent.repo_map.tool_definition["function"]["name"] == "repo_map"
