@@ -45,7 +45,7 @@ def run_instance(instance: Instance, solve: SolveFn, batch_dir: Path, run_label:
     teardown = instance.env_setup(work) if instance.env_setup else None
     start = time.monotonic()
     try:
-        solve(work, instance.problem_statement)
+        solve(work, instance.problem_statement, audit=instance.audit)
         diff = instance.capture() if instance.capture else capture_diff(work)
     finally:
         if teardown:

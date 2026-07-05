@@ -40,7 +40,7 @@ def test_noop_solver_yields_a_failing_result(base_repo, tmp_path, solvers):
 def test_runner_collects_agent_telemetry_files(base_repo, tmp_path, solvers, monkeypatch):
     monkeypatch.chdir(tmp_path)  # telemetry lands in cwd; keep the test isolated
 
-    def telemetry_solver(repo_dir, task):
+    def telemetry_solver(repo_dir, task, audit=None):
         (tmp_path / "tool_calls.jsonl").write_text('{"tool": "bash"}\n')
         (tmp_path / "metrics.json").write_text('{"agents": []}')
         (tmp_path / "final_message.md").write_text("all done")
@@ -74,7 +74,7 @@ def test_container_backed_instance_has_no_host_copy_and_captures_before_teardown
         capture=lambda: events.append(("capture",)) or "the diff",
     )
 
-    def solver(repo_dir, task):
+    def solver(repo_dir, task, audit=None):
         assert repo_dir is None  # nothing on the host to point the agent at
         return ""
 

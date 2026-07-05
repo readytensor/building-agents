@@ -67,6 +67,12 @@ class Instance:
     # must be extracted from inside the environment BEFORE teardown. None = the
     # runner diffs the host working copy itself.
     capture: Optional[Callable[[], str]] = None
+    # Optional pre-acceptance audit hook: called when the agent requests to
+    # stop, returns a list of finding strings (empty = stop accepted). The
+    # environment's half of the stop handshake -- providers own the completion
+    # contract, the agent loop stays task-agnostic. None = every stop accepted
+    # (the classic natural stop).
+    audit: Optional[Callable[[], list]] = None
 
     def verify(self) -> Verdict:
         return self.scorer(self.repo_dir, self.fail_to_pass, self.pass_to_pass)

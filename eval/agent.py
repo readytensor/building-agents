@@ -145,11 +145,17 @@ def _chat_with_retry(client, sleep=time.sleep, **kwargs):
             sleep(LLM_RETRY_WAIT)
 
 
-def solve(repo_dir: Path, problem_statement: str) -> str:
+def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
     """Run the Ep 5 agent with problem_statement as the task. repo_dir is the
     host working copy to edit in place -- or None on a container run, where
     the workspace is the container's /testbed and every tool executes inside.
-    Returns "" either way: the runner owns diff capture."""
+    Returns "" either way: the runner owns diff capture.
+
+    audit is the environment's half of the stop handshake (see eval/audit.py):
+    when the model requests a stop (a turn with no tool calls), the hook is
+    called and its findings -- if any, and if the one-bounce budget is unspent
+    -- go back into the conversation instead of ending the run. None (the
+    episodes, the local provider) keeps the classic natural stop, verbatim."""
     # Reset per-run state. The episodes never reset TOOL_CALLS (one run per
     # process), but a multi-sample batch runs several solves in one process --
     # without the clear, each sample's tool_calls.jsonl would accumulate every
@@ -176,6 +182,7 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
     compactions = compact_in = compact_out = 0
     tool_call_count = 0
     mechanism_calls = {"write_plan": 0, "list_skills": 0, "load_skill": 0}
+    audit_bounces, audit_unresolved = 0, []
     while iteration < MAX_ITERATIONS:
         iteration += 1
         tools.CURRENT_ROUND = iteration
@@ -192,6 +199,23 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
         msg = resp.choices[0].message
         messages.append(msg.model_dump(exclude_none=True))
         if not msg.tool_calls:
+            # The stop handshake: the model just REQUESTED a stop; the audit
+            # hook is the environment deciding whether to GRANT it. Findings
+            # bounce back into the same conversation exactly once -- the agent
+            # keeps its full context, so acting on them is cheap. After the
+            # budget, the stop is unconditional (MAX_ITERATIONS backstops all).
+            findings = audit() if audit else []
+            if findings and audit_bounces < 1:
+                audit_bounces += 1
+                print(f"[iter {iteration}] [audit bounce: {len(findings)} finding(s)]",
+                      flush=True)
+                messages.append({"role": "user", "content": (
+                    "AUDIT: your submission was checked before acceptance and "
+                    "was not accepted:\n"
+                    + "\n".join(f"- {f}" for f in findings)
+                    + "\nAddress these findings, then finish normally.")})
+                continue
+            audit_unresolved = findings  # accepted anyway: record what stood
             break
         tool_call_count += len(msg.tool_calls)
         for tc in msg.tool_calls:
@@ -250,6 +274,7 @@ def solve(repo_dir: Path, problem_statement: str) -> str:
                 "load_skill": mechanism_calls["load_skill"],
                 "loaded": list(skills.LOADED_SKILLS),
             },
+            "audit": {"bounces": audit_bounces, "unresolved": audit_unresolved},
         }],
         "config": {"MODEL": MODEL, "MAX_ITERATIONS": MAX_ITERATIONS},
     }

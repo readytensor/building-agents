@@ -14,7 +14,7 @@ run_eval --grade, or per batch via eval.official.
 """
 import json
 
-from eval import container
+from eval import audit, container
 from eval.targets import Instance, Verdict
 
 DATASET = "princeton-nlp/SWE-bench_Verified"
@@ -62,6 +62,12 @@ def to_instance(record: dict) -> Instance:
         # can't launder the agent's work into an empty patch.
         capture=lambda bc=record["base_commit"]: container.capture_diff(
             container.ACTIVE, base_commit=bc),
+        # The completion contract for a SWE-bench change task: when the agent
+        # requests a stop, its would-be patch must be non-empty, must not
+        # weaken existing tests, and must carry no binary artifacts. The loop
+        # bounces the findings back once before accepting (eval/audit.py).
+        audit=lambda bc=record["base_commit"]: audit.run_checks(
+            container.capture_diff(container.ACTIVE, base_commit=bc)),
     )
 
 

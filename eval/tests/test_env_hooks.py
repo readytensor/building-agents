@@ -34,7 +34,7 @@ def test_teardown_runs_even_when_solve_raises(base_repo, tmp_path):
     def setup(work_dir):
         return lambda: events.append("teardown")
 
-    def exploding_solver(repo_dir, task):
+    def exploding_solver(repo_dir, task, audit=None):
         raise RuntimeError("boom")
 
     with pytest.raises(RuntimeError):

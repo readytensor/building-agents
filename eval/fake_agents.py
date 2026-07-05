@@ -18,7 +18,7 @@ def git(repo: Path, *args):
     )
 
 
-def fixing_solver(repo_dir: Path, problem_statement: str) -> str:
+def fixing_solver(repo_dir: Path, problem_statement: str, audit=None) -> str:
     """A fake agent that correctly fixes add() in place, then returns its diff."""
     target = repo_dir / "calc.py"
     target.write_text(
@@ -32,6 +32,6 @@ def fixing_solver(repo_dir: Path, problem_statement: str) -> str:
     ).stdout
 
 
-def noop_solver(repo_dir: Path, problem_statement: str) -> str:
+def noop_solver(repo_dir: Path, problem_statement: str, audit=None) -> str:
     """A fake agent that changes nothing (test_add stays failing)."""
     return ""
