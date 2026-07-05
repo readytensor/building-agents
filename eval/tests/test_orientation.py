@@ -1,6 +1,6 @@
 """Tests for the repo_map orientation tool: the mapper in container_fileops
 (one implementation, used in-container and host-side) and its wiring in
-eval/agent.py (the injected root map + the drill-down tool proxy).
+eval/agent.py (the repo_map tool proxy).
 All offline: synthetic trees, no docker, no LLM.
 """
 from pathlib import Path
@@ -160,6 +160,8 @@ def test_async_functions_are_labeled(tmp_path):
 
 
 # --- agent wiring (eval/agent.py) -----------------------------------------
+# Tests cover the drill-down tool proxy only (the injected root map was
+# removed -- orientation is something the agent does by calling tools).
 # Importing eval.agent is offline-safe (test_bash_proxy.py precedent): it
 # builds an OpenAI client only inside solve().
 
@@ -187,35 +189,9 @@ def test_repo_map_tool_host_path(tmp_path, monkeypatch):
     assert "README: README.md" in out
 
 
-def test_system_with_repo_map_injects_and_is_a_noop_when_empty(monkeypatch):
-    from eval import agent
-    monkeypatch.setattr(agent, "REPO_MAP", "THE MAP")
-    out = agent.system_with_repo_map("BASE")
-    assert out.startswith("BASE")
-    assert "[REPOSITORY MAP]" in out and "THE MAP" in out
-    monkeypatch.setattr(agent, "REPO_MAP", "")
-    assert agent.system_with_repo_map("BASE") == "BASE"
-
-
-def test_generate_repo_map_swallows_errors(tmp_path, monkeypatch):
-    from eval import agent, container
-    import tools
-    monkeypatch.setattr(container, "ACTIVE", None)
-    monkeypatch.setattr(tools, "SANDBOX", tmp_path / "does-not-exist")
-    assert agent._generate_repo_map() == ""  # error string -> no injection
-
-
 def test_repo_map_is_in_the_toolset():
     from eval import agent
     assert agent.repo_map.tool_definition["function"]["name"] == "repo_map"
-
-
-def test_generate_repo_map_swallows_container_errors(monkeypatch):
-    from eval import agent, container
-    monkeypatch.setattr(container, "ACTIVE", "cid123")
-    monkeypatch.setattr(container, "fileop",
-                        lambda cid, op, kwargs: "Error: repo_map failed in the container: boom")
-    assert agent._generate_repo_map() == ""
 
 
 def test_huge_tree_collapses_to_depth_2_and_keeps_all_top_branches(tmp_path):
