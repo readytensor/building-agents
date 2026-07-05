@@ -208,3 +208,11 @@ def test_generate_repo_map_swallows_errors(tmp_path, monkeypatch):
 def test_repo_map_is_in_the_toolset():
     from eval import agent
     assert agent.repo_map.tool_definition["function"]["name"] == "repo_map"
+
+
+def test_generate_repo_map_swallows_container_errors(monkeypatch):
+    from eval import agent, container
+    monkeypatch.setattr(container, "ACTIVE", "cid123")
+    monkeypatch.setattr(container, "fileop",
+                        lambda cid, op, kwargs: "Error: repo_map failed in the container: boom")
+    assert agent._generate_repo_map() == ""

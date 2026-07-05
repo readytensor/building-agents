@@ -83,6 +83,9 @@ def bash(command: str) -> str:
 _IN_CONTAINER_TOOLS = {"list_files", "read", "write", "edit", "grep"}
 
 
+# Routes itself like bash: the _IN_CONTAINER_TOOLS set is only for episode
+# tools whose host implementations are container-unaware; this one checks
+# container.ACTIVE in its own body.
 @tool("Show a generated map of the repository. With no path (or '.'): the "
       "README and config files that exist, the package tree with docstring "
       "one-liners, and where the tests live. With path=<subdirectory>: the "
@@ -105,7 +108,7 @@ REPO_MAP = ""
 def system_with_repo_map(base_system: str) -> str:
     if not REPO_MAP:
         return base_system
-    return (f"{base_system}\n\n[REPOSITORY MAP]\n{REPO_MAP}\n[end repository map]")
+    return f"{base_system}\n\n[REPOSITORY MAP]\n{REPO_MAP}\n[end repository map]"
 
 
 def _generate_repo_map() -> str:
