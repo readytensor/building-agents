@@ -216,3 +216,37 @@ def test_generate_repo_map_swallows_container_errors(monkeypatch):
     monkeypatch.setattr(container, "fileop",
                         lambda cid, op, kwargs: "Error: repo_map failed in the container: boom")
     assert agent._generate_repo_map() == ""
+
+
+def test_huge_tree_collapses_to_depth_2_and_keeps_all_top_branches(tmp_path):
+    # 200 leaf dirs under aa/, but only a handful of top branches. Flat
+    # rendering would burn the cap on aa/* and truncate zz/ out; the
+    # collapsed rendering must show every top branch, aggregated.
+    for i in range(cf._DIR_CAP + 50):
+        d = tmp_path / "aa" / f"leaf{i:03d}"
+        d.mkdir(parents=True)
+        (d / "mod.py").write_text("x = 1\n", encoding="utf-8")
+    zz = tmp_path / "zz"
+    zz.mkdir()
+    (zz / "core.py").write_text("x = 1\n", encoding="utf-8")
+    out = cf.repo_map(tmp_path)
+    assert f"aa/ ({cf._DIR_CAP + 50} modules in {cf._DIR_CAP + 50} dirs)" in out
+    assert "zz/ (1 modules)" in out
+    assert "leaf000" not in out  # depth-3 paths are collapsed away
+
+
+def test_small_tree_stays_fully_detailed(tmp_path):
+    out = cf.repo_map(_make_repo(tmp_path))
+    assert "pkg/sub/ (2 modules)" in out  # no collapse below the cap
+
+
+def test_collapse_falls_back_to_depth_1(tmp_path):
+    # More than _DIR_CAP distinct depth-2 prefixes: depth-2 rendering is
+    # still over the cap, so it must fall back to depth 1.
+    for i in range(cf._DIR_CAP + 10):
+        d = tmp_path / "pkg" / f"sub{i:03d}" / "inner"
+        d.mkdir(parents=True)
+        (d / "mod.py").write_text("x = 1\n", encoding="utf-8")
+    out = cf.repo_map(tmp_path)
+    assert f"pkg/ ({cf._DIR_CAP + 10} modules in {cf._DIR_CAP + 10} dirs)" in out
+    assert "sub000" not in out

@@ -183,9 +183,52 @@ def _walk_pruned(top: Path):
 
 
 def _mapped_dirs(rootr: Path) -> list:
-    """Every directory under root that directly holds .py files."""
-    return [d for d, files in _walk_pruned(rootr)
+    """(directory, direct .py module count) for every directory under root
+    that directly holds .py files."""
+    return [(d, sum(1 for f in files if f.endswith(".py")))
+            for d, files in _walk_pruned(rootr)
             if d != rootr and any(f.endswith(".py") for f in files)]
+
+
+def _dir_doc(d: Path) -> str:
+    """The __init__.py docstring one-liner for a directory, or ""."""
+    init = d / "__init__.py"
+    if not init.exists():
+        return ""
+    tree = _parse(init)
+    return _first_doc_line(tree) if tree else ""
+
+
+def _tree_lines(rootr: Path, entries: list, depth: int = None) -> list:
+    """Render the package tree, optionally collapsed to a directory depth.
+
+    Uncollapsed (depth None): one line per directory. Collapsed: every entry
+    is folded into its first `depth` path components, and each surviving
+    prefix line aggregates the module count of everything beneath it -- so a
+    huge tree shows ALL its top branches shallowly instead of an alphabetical
+    prefix deeply (django: conf/locale/* was crowding out db/ and forms/)."""
+    if depth is None:
+        lines = []
+        for d, n in entries:
+            rel = str(d.relative_to(rootr)).replace("\\", "/")
+            doc = _dir_doc(d)
+            lines.append(f"  {rel}/ ({n} modules)" + (f" -- {doc}" if doc else ""))
+        return lines
+    groups = {}  # prefix parts -> [modules, dirs]
+    for d, n in entries:
+        prefix = d.relative_to(rootr).parts[:depth]
+        stat = groups.setdefault(prefix, [0, 0])
+        stat[0] += n
+        stat[1] += 1
+    lines = []
+    for prefix in sorted(groups):
+        modules, ndirs = groups[prefix]
+        rel = "/".join(prefix)
+        count = (f"({modules} modules in {ndirs} dirs)" if ndirs > 1
+                 else f"({modules} modules)")
+        doc = _dir_doc(rootr.joinpath(*prefix))
+        lines.append(f"  {rel}/ {count}" + (f" -- {doc}" if doc else ""))
+    return lines
 
 
 def repo_map(root: Path, path: str = ".") -> str:
@@ -216,23 +259,19 @@ def _map_overview(rootr: Path) -> str:
         lines.append("Test/build config found: " + ", ".join(runner))
     lines.append("")
     lines.append("Package tree (directories with Python modules; one-liners from __init__.py):")
-    dirs = _mapped_dirs(rootr)
-    test_dirs = []
-    for i, d in enumerate(dirs):
-        rel = str(d.relative_to(rootr)).replace("\\", "/")
-        if d.name.startswith("test") or (d / "conftest.py").exists():
-            test_dirs.append(rel)
-        if i >= _DIR_CAP:
-            continue  # past the print cap; keep collecting test locations
-        n = sum(1 for f in d.iterdir() if f.is_file() and f.suffix == ".py")
-        doc = ""
-        init = d / "__init__.py"
-        if init.exists():
-            tree = _parse(init)
-            doc = _first_doc_line(tree) if tree else ""
-        lines.append(f"  {rel}/ ({n} modules)" + (f" -- {doc}" if doc else ""))
-    if len(dirs) > _DIR_CAP:
-        lines.append(f"  ... ({len(dirs) - _DIR_CAP} more directories; "
+    entries = _mapped_dirs(rootr)
+    test_dirs = [str(d.relative_to(rootr)).replace("\\", "/") for d, _ in entries
+                 if d.name.startswith("test") or (d / "conftest.py").exists()]
+    # Depth-adaptive collapse: a flat listing of a huge tree burns the cap on
+    # alphabetical noise and truncates the real packages out entirely.
+    tree = _tree_lines(rootr, entries)
+    for depth in (2, 1):
+        if len(tree) <= _DIR_CAP:
+            break
+        tree = _tree_lines(rootr, entries, depth)
+    lines += tree[:_DIR_CAP]
+    if len(tree) > _DIR_CAP:
+        lines.append(f"  ... ({len(tree) - _DIR_CAP} more directories; "
                      "call repo_map(path=...) to inspect one)")
     lines.append("")
     lines.append("Test locations (test* directories or a conftest.py):")
