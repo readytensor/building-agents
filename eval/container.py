@@ -29,8 +29,11 @@ BASH_TIMEOUT = 120  # seconds; test suites are slower than host one-liners
 
 
 def _run(cmd: list) -> str:
+    # 900s: this covers `docker run` INCLUDING the image pull on first use.
+    # The big instance images (matplotlib ~7.5GB) exceeded 600s when several
+    # workers pulled concurrently (dev20 K=5: three workers died mid-pull).
     proc = subprocess.run(cmd, capture_output=True, text=True,
-                          encoding="utf-8", errors="replace", timeout=600)
+                          encoding="utf-8", errors="replace", timeout=900)
     if proc.returncode != 0:
         raise RuntimeError(f"{' '.join(cmd[:3])}... failed: {proc.stderr[-1000:]}")
     return proc.stdout
