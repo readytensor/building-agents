@@ -1,8 +1,8 @@
 """The system prompt is one shared artifact, kept as system_prompt.md files:
 a common core in every episode, mechanism sections appearing as episodes
 introduce them (Working plan in Ep 4, Skills in Ep 5), and the eval agent
-adding exactly one eval-specific section (Orientation) on top of Ep 5.
-This test is the drift guard: any copy edited alone fails here.
+byte-identical to Ep 5. This test is the drift guard: any copy edited
+alone fails here.
 """
 from pathlib import Path
 
@@ -25,20 +25,13 @@ def _sections(text: str) -> dict:
     return {k: "\n".join(v).strip() for k, v in parts.items()}
 
 
-def test_eval_prompt_adds_only_the_orientation_section():
-    """Eval = Ep 5 plus ## Orientation (the injected repository map and the
-    README-first mandate exist only in the eval harness for now; promotion
-    to the episodes is a separate, later decision)."""
-    ep5 = _sections(_prompt("episodes/05-skills"))
-    ev = _sections(_prompt("eval"))
-    for header, body in ep5.items():
-        label = header or "(preamble)"
-        assert ev[header] == body, f"eval drifted in {label}"
-    assert set(ev) - set(ep5) == {"## Orientation"}
-    # Section ORDER matters to the model: orientation is the start-of-task
-    # routine, so it must precede everything else (dicts preserve file order).
-    order = list(ev)
-    assert order.index("## Orientation") < order.index("## Skills")
+def test_eval_prompt_is_byte_identical_to_ep5():
+    # The eval agent IS the Ep 5 agent; its prompt carries no eval-specific
+    # sections. (An Orientation section existed briefly on 2026-07-04:
+    # mandating repo_map bought first-call adoption but no verdict change,
+    # so the tool is now merely available and the agent uses it as it
+    # sees fit.)
+    assert _prompt("eval") == _prompt("episodes/05-skills")
 
 
 def test_early_episodes_share_the_same_core():
