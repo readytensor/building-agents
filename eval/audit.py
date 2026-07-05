@@ -65,22 +65,28 @@ def check_empty(diff: str) -> list:
 
 def check_test_modifications(diff: str) -> list:
     """Existing test files with deleted/changed lines (or deleted outright).
-    New test files and pure additions to existing ones are fine -- tests are a
-    regression contract, and the contract only forbids weakening it."""
+    New test files and pure additions to existing ones never bounce. Edits to
+    existing tests bounce once as a confirmation tripwire, not a prohibition:
+    the prompt allows surgical amendments that reflect the task's own behavior
+    change, and a justified amendment survives the bounce (the agent keeps it
+    and finishes; the stop is then accepted)."""
     findings = []
     for block in _file_blocks(diff):
         if not _is_test_path(block["path"]) or block["new"]:
             continue
         if block["deleted"]:
             findings.append(f"existing test file deleted: {block['path']}. "
-                            "Existing tests are a regression contract: restore it.")
+                            "Delete tests only if the behavior change your "
+                            "task calls for requires it; otherwise restore "
+                            "the file.")
             continue
         removed = any(line.startswith("-") and not line.startswith("---")
                       for line in block["lines"])
         if removed:
             findings.append(f"existing test lines modified in: {block['path']}. "
-                            "Existing tests are a regression contract: restore "
-                            "them and add new tests instead.")
+                            "Keep these edits only if they reflect the "
+                            "behavior change your task calls for; otherwise "
+                            "restore them and add new tests instead.")
     return findings
 
 

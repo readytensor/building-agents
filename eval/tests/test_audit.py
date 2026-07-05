@@ -82,10 +82,12 @@ def test_source_edit_passes_clean():
 
 
 def test_modified_existing_test_lines_are_a_finding():
+    # A confirmation tripwire, not a prohibition: the message asks the agent
+    # to keep the edit only if the task's behavior change requires it.
     findings = audit.run_checks(TEST_EDIT)
     assert len(findings) == 1
     assert "tests/test_core.py" in findings[0]
-    assert "regression contract" in findings[0]
+    assert "behavior change" in findings[0]
 
 
 def test_pure_additions_to_existing_tests_are_allowed():
