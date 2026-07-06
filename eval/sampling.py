@@ -26,6 +26,43 @@ def filter_pool(instances, difficulty=None, repo=None):
     return pool
 
 
+def _allocate(n, sizes):
+    """Split n across buckets in proportion to their sizes, using largest-
+    remainder rounding so the counts always sum to n (capped at the pool)."""
+    total = sum(sizes.values())
+    n = min(n, total)
+    exact = {name: n * size / total for name, size in sizes.items()}
+    counts = {name: int(exact[name]) for name in sizes}
+    while sum(counts.values()) < n:
+        # Hand leftover slots to the buckets rounding lost the most from,
+        # skipping any bucket already at its full size.
+        open_buckets = [b for b in sizes if counts[b] < sizes[b]]
+        counts[max(open_buckets, key=lambda b: (exact[b] - counts[b], b))] += 1
+    return counts
+
+
+def stratified_sample(instances, n, seed):
+    """A seeded sample spread across the difficulty buckets in proportion to
+    their share of the pool, so a small n still mirrors the pool's mix instead
+    of drifting toward whichever bucket chance favors."""
+    buckets = {
+        name: sorted((i for i in instances if i.meta.get("difficulty") in labels),
+                     key=lambda i: i.id)
+        for name, labels in DIFFICULTY_LABELS.items()
+    }
+    buckets = {name: pool for name, pool in buckets.items() if pool}
+    if not buckets:
+        raise ValueError("stratified sampling needs difficulty metadata on the pool")
+    counts = _allocate(n, {name: len(pool) for name, pool in buckets.items()})
+    picked = []
+    for name in sorted(buckets):
+        # One RNG stream per bucket: a bucket's picks depend only on the seed,
+        # not on what the other buckets contain.
+        rng = random.Random(f"{seed}:{name}")
+        picked += rng.sample(buckets[name], counts[name])
+    return picked
+
+
 def sample(instances, n, seed, instance_id=None):
     """Return the instances to run.
 

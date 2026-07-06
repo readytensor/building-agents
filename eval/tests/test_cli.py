@@ -38,6 +38,9 @@ def test_cli_fake_agent_end_to_end(tmp_path, monkeypatch):
     row = json.loads(board[0])
     assert row["pass_at_1"] == 1.0
     assert (results_root / "t0" / "summary.md").exists()
+    # The manifest records how the sample was drawn, stratified or flat.
+    manifest = json.loads((results_root / "t0" / "manifest.json").read_text())
+    assert manifest["stratified"] is False
     verdict = json.loads((results_root / "t0" / "md2html__demo" / "verify.json").read_text())
     assert verdict["passed"] is True
 
@@ -119,6 +122,18 @@ def test_partial_summary_survives_a_fatal_grading_failure(tmp_path, monkeypatch)
     partial = json.loads((batch / "summary.json").read_text())
     assert partial["aggregate"]["n_instances"] == 1
     assert partial["instances"][0]["passed"] is True
+
+
+def test_stratified_rejected_with_difficulty_filter():
+    with pytest.raises(SystemExit, match="--stratified spans the difficulty buckets"):
+        run_eval.main(["--source", "swebench", "--agent", "fake-noop",
+                       "--stratified", "--difficulty", "easy"])
+
+
+def test_stratified_rejected_with_id():
+    with pytest.raises(SystemExit, match="--stratified samples a pool"):
+        run_eval.main(["--source", "swebench", "--agent", "fake-noop",
+                       "--stratified", "--id", "some__instance"])
 
 
 def test_clean_images_rejected_for_local_source(tmp_path):

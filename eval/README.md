@@ -21,13 +21,26 @@ after it runs:
 Useful flags:
 
 - `--n N` how many instances to sample
+- `--stratified` spread `--n` across the easy/medium/hard buckets in
+  proportion to their share of the pool, so a small sample mirrors the
+  benchmark's difficulty mix (e.g. `--n 20 --stratified` picks 8/10/2)
 - `--id <instance-id>` run one specific instance
 - `--difficulty {easy,medium,hard}` filter by Verified's time-to-fix bucket
+- `--repo <substring>` filter by repository, e.g. `--repo django`
 - `--no-grade` skip the per-sample official grading (on by default for
   swebench; grading a sample right away surfaces a broken setup at sample 1)
+- `--no-clean-images` keep each instance's Docker image after its sample
+  finishes (removal is on by default so a batch's disk use stays flat)
 - `--repeat K` run each sampled instance K times (for pass@k and variance)
 - `--seed S` reproducible sampling
 - `--keep {none,failures,all}` how much per-instance log detail to retain
+
+For bigger batches, `eval/dispatch.py` runs one `run_eval` subprocess per
+instance, at most `--workers` at a time, and consolidates one summary at the
+end. A killed batch resumes where it left off (completed instances are
+skipped). It takes an explicit instance list:
+
+    python -m eval.dispatch --batch my-batch-name --workers 3 --ids id1 id2 ...
 
 The `local` provider (`--source local`) runs the series' own episode tasks
 (Eps 3-6) over each episode's pristine `initial/` md2html tree, scored by

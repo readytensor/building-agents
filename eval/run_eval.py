@@ -4,6 +4,7 @@
     python -m eval.run_eval --source local --id md2html__alerts
     python -m eval.run_eval --source local --agent fake-fixing --n 1   # token-free smoke
     python -m eval.run_eval --source swebench --n 5   # grades each sample as it lands (--no-grade to skip)
+    python -m eval.run_eval --source swebench --n 20 --stratified   # proportional easy/medium/hard mix
 
 The agent-under-test is selectable: `--agent ep5` (default, the real reference
 agent) or a fake adapter for token-free testing. Providers supply instances;
@@ -18,7 +19,7 @@ from pathlib import Path
 from eval.fake_agents import fixing_solver, noop_solver
 from eval.results import aggregate, append_scoreboard, apply_retention, write_manifest, write_summary
 from eval.runner import run_instance
-from eval.sampling import filter_pool, sample
+from eval.sampling import filter_pool, sample, stratified_sample
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
@@ -97,6 +98,11 @@ def main(argv=None):
                    help="filter by Verified's time-to-fix bucket before sampling")
     p.add_argument("--repo", default=None, help="filter by repo substring, e.g. flask")
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--stratified", action="store_true",
+                   help="spread --n across the difficulty buckets in proportion "
+                        "to their share of the pool (instead of one flat random "
+                        "draw), so a small sample mirrors the benchmark's mix. "
+                        "Needs difficulty metadata, so swebench only.")
     p.add_argument("--grade", action=argparse.BooleanOptionalAction, default=None,
                    help="officially grade each sample right after it runs (solve -> "
                         "grade -> next sample), so a broken setup surfaces after the "
@@ -114,6 +120,12 @@ def main(argv=None):
     args = p.parse_args(argv)
 
     solve, agent_label, model_label = _select_agent(args.agent)
+    if args.stratified and args.difficulty:
+        raise SystemExit("--stratified spans the difficulty buckets; it can't "
+                         "be combined with a --difficulty filter")
+    if args.stratified and args.instance_id:
+        raise SystemExit("--stratified samples a pool; it can't be combined "
+                         "with --id")
     if args.grade and args.source != "swebench":
         raise SystemExit("--grade needs --source swebench (official grading only exists there)")
     if args.grade is None:  # unset: official verdicts are the default where they exist
@@ -124,7 +136,13 @@ def main(argv=None):
         args.clean_images = args.source == "swebench"
     instances = filter_pool(_load_instances(args.source),
                             difficulty=args.difficulty, repo=args.repo)
-    picked = sample(instances, n=args.n, seed=args.seed, instance_id=args.instance_id)
+    if args.stratified:
+        try:
+            picked = stratified_sample(instances, n=args.n, seed=args.seed)
+        except ValueError as e:
+            raise SystemExit(str(e))
+    else:
+        picked = sample(instances, n=args.n, seed=args.seed, instance_id=args.instance_id)
     if not picked:
         raise SystemExit("no instances selected (check --id / --difficulty / --repo)")
 
@@ -139,7 +157,8 @@ def main(argv=None):
     write_manifest(batch_dir, {
         "timestamp": stamp, "agent": agent_label, "agent_git_sha": _agent_git_sha(),
         "model": model_label, "source": args.source, "n": args.n, "repeat": args.repeat,
-        "seed": args.seed, "filters": {"difficulty": args.difficulty, "repo": args.repo},
+        "seed": args.seed, "stratified": args.stratified,
+        "filters": {"difficulty": args.difficulty, "repo": args.repo},
         "instance_ids": [i.id for i in picked],
     })
 
