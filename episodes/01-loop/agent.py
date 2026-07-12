@@ -9,6 +9,7 @@ See ../../README.md for context.
 import json
 import os
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -58,20 +59,14 @@ client = OpenAI(api_key=api_key_for(BASE_URL), base_url=BASE_URL or None)
 def bash(command: str) -> str:
     """Execute a shell command in the working directory and return its output.
 
-    check=False is deliberate: command failures (non-zero exit) come back to
-    the LLM as tool output so the model can adapt. For example 'ls' fails on
-    Windows cmd, the LLM sees the error and pivots to 'dir'. Crashing the
-    agent on non-zero exit would defeat that.
+    Failures (non-zero exit) come back as tool output so the model can read
+    the error and adapt; crashing the agent on non-zero exit would defeat that.
 
-    IMPORTANT: cwd is NOT a security boundary. shell=True gives the model a
-    real shell, so cwd=SANDBOX only sets the *starting* directory: the command
-    can cd elsewhere, use absolute paths, or read and write anything this
-    process can. The fresh copy of initial/ is for convenience and
-    reproducibility, not safety. Actually containing a shell tool needs
-    OS-level isolation (a container, or a sandbox like macOS Seatbelt / Linux
-    bubblewrap, the way real agents such as Claude Code do it), which is out of
-    scope for this toy. So run this against code you trust, on a machine you
-    don't mind it touching, or inside a throwaway VM/container.
+    cwd only sets the STARTING directory -- it is not a security boundary.
+    shell=True gives the model a real shell that can cd anywhere and touch
+    anything this process can. True isolation needs a container or an OS
+    sandbox (the way real agents such as Claude Code do it); out of scope for
+    this toy, so run it on code you trust or inside a throwaway VM/container.
     """
     proc = subprocess.Popen(
         command, shell=True,
@@ -82,28 +77,7 @@ def bash(command: str) -> str:
     try:
         output = proc.communicate(timeout=30)[0]
     except subprocess.TimeoutExpired:
-        # Kill the WHOLE process tree, not just the shell. With shell=True the
-        # real command runs as a grandchild of the shell; killing only the shell
-        # leaves the grandchild alive, still holding the output pipe — which
-        # deadlocks the drain (an unbounded loop would then hang forever).
-        # taskkill /T (Windows) and killpg (POSIX) take the descendants down too.
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, check=False)
-        else:
-            import signal
-            killpg = getattr(os, "killpg", None)      # POSIX-only; absent on Windows,
-            getpgid = getattr(os, "getpgid", None)    # so this branch never runs there
-            if killpg and getpgid:
-                try:
-                    killpg(getpgid(proc.pid), getattr(signal, "SIGKILL", 9))
-                except ProcessLookupError:
-                    pass
-        if proc.poll() is None:   # if the tree-kill missed, at least kill the shell
-            proc.kill()
-        try:
-            proc.communicate(timeout=5)
-        except subprocess.TimeoutExpired:
-            pass
+        _kill_process_tree(proc)  # boilerplate: shell=True orphans grandchildren
         return (
             "Error: command timed out after 30s and was killed (whole process "
             "tree). Avoid long-running or interactive commands, watch for code "
@@ -115,6 +89,35 @@ def bash(command: str) -> str:
     if proc.returncode:                      # surface failures so the model can adapt
         output += f"\n(exit code {proc.returncode})"
     return output or "(no output)"
+
+
+def _kill_process_tree(proc: subprocess.Popen) -> None:
+    """Kill a timed-out shell AND its descendants (cross-platform boilerplate).
+
+    With shell=True the real command runs as a child of the shell; killing
+    only the shell can leave that child alive, still holding the output pipe
+    -- which deadlocks the drain (an unbounded loop would then hang forever).
+    taskkill /T on Windows and killpg on POSIX take descendants down too.
+    """
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+            capture_output=True,
+            check=False,
+        )
+    else:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+
+    if proc.poll() is None:   # if the tree-kill missed, at least kill the shell
+        proc.kill()
+
+    try:
+        proc.communicate(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
 
 BASH_TOOL = {
     "type": "function",
