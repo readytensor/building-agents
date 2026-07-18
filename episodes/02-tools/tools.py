@@ -62,8 +62,10 @@ def tool(description: str):
 
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            call_args = sig.bind(*args, **kwargs)
-            TOOL_CALLS.append({"round": CURRENT_ROUND, "tool": func.__name__, "args": dict(call_args.arguments)})
+            # Record the call before running it, so the path stays correct even
+            # if the tool raises.
+            bound = sig.bind(*args, **kwargs)
+            TOOL_CALLS.append({"round": CURRENT_ROUND, "tool": func.__name__, "args": dict(bound.arguments)})
             return func(*args, **kwargs)
 
         wrapper.tool_definition = {
@@ -83,7 +85,7 @@ def tool(description: str):
     return decorator
 
 
-# --- The tools. All paths resolve inside SANDBOX.
+# --- The working tools. All paths resolve inside SANDBOX.
 def _safe_path(path: str) -> Path:
     """Resolve `path` inside SANDBOX. Raises if it escapes."""
     resolved = (SANDBOX / path).resolve()

@@ -79,8 +79,7 @@ USAGE = {
 
 def write_metrics(model: str, system: str, task: str):
     """Write this run's token usage to metrics.json. Recording only — the
-    harness (run.py) reads this and renders the summary, so the agent stays
-    minimal and all usage reporting lives in one place."""
+    harness (run.py) reads this and renders the summary."""
     metrics = {
         "agents": [{"label": "agent", **USAGE}],
         "inputs": {"system": system, "task": task},
