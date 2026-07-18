@@ -157,6 +157,16 @@ TASK = (  # summarize the project
 # run). Summarized and written to tool_calls.jsonl at the end of the run.
 TOOL_CALLS = []  # list of {"round": n, "tool": name, "args": {...}} in call order
 
+
+def write_tool_telemetry():
+    """Write the tool calls made this run to tool_calls.jsonl, one JSON object
+    per line in call order. Recording only — rendering a summary is left to
+    whatever reads the file."""
+    with open("tool_calls.jsonl", "w", encoding="utf-8") as f:
+        for call in TOOL_CALLS:
+            f.write(json.dumps(call) + "\n")
+
+
 # --- Usage telemetry: token counts per run, recorded by run_agent as it goes.
 # The agent only RECORDS (to metrics.json); the harness (run.py) RENDERS the
 # summary. Keeping reporting out of the agent keeps it minimal.
@@ -166,15 +176,6 @@ USAGE = {
     "output_tokens": 0,
     "per_iter": [],  # {model_in, model_out, tools, tools_out} per round
 }
-
-
-def write_tool_telemetry():
-    """Write the tool calls made this run to tool_calls.jsonl, one JSON object
-    per line in call order. Recording only — rendering a summary is left to
-    whatever reads the file."""
-    with open("tool_calls.jsonl", "w", encoding="utf-8") as f:
-        for call in TOOL_CALLS:
-            f.write(json.dumps(call) + "\n")
 
 
 def write_metrics(model: str, system: str, task: str):
