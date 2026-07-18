@@ -51,9 +51,39 @@ MODEL = os.environ.get("EVAL_LLM_AGENT_MODEL") or os.environ.get("LLM_AGENT_MODE
 BASE_URL = os.environ.get("EVAL_LLM_BASE_URL") or os.environ.get("LLM_BASE_URL") or ""
 MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 200))
 
+# Advisor (optional): a stronger model the agent can consult mid-task -- the
+# "executor + advisor" pattern. The ask_advisor tool registers ONLY when
+# LLM_ADVISOR_MODEL is set, so a run without it is byte-identical to the
+# plain agent. The advisor sees the executor's full live transcript and
+# answers with bounded advice (never edits).
+ADVISOR_MODEL = os.environ.get("LLM_ADVISOR_MODEL") or ""
+ADVISOR_BASE_URL = os.environ.get("LLM_ADVISOR_BASE_URL") or BASE_URL
+# Bounds the advisor's reply. Reasoning models (Sonnet 5 etc.) spend
+# "thinking" tokens against this same budget BEFORE any visible text -- 2000
+# starved the reply to empty in testing; 8000 leaves thinking headroom while
+# still capping runaway replies.
+ADVISOR_MAX_TOKENS = int(os.environ.get("ADVISOR_MAX_TOKENS", 8000))
+
 # The system prompt lives in eval/system_prompt.md, byte-identical to Ep 5's
 # (the episode this agent is built from); a drift test keeps every copy in sync.
 SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
+
+# Advisor steering, rung 2: description-only steering produced zero calls
+# (the skills precedent repeating), so a configured advisor also adds a
+# mechanical consult directive -- the named-tool mandate pattern that
+# reliably fires. Appended at runtime, gated on the env var, so the shared
+# system_prompt.md and its drift test stay untouched; no-advisor runs use
+# the file byte-for-byte.
+if ADVISOR_MODEL:
+    SYSTEM += (
+        "\n\n## Advisor\n"
+        "A more capable model is available through the ask_advisor tool. You "
+        "MUST consult it at two points. (1) BEFORE your first edit to any "
+        "file: state the approach you intend to take and ask whether it is "
+        "the right one. (2) AFTER your changes pass verification, BEFORE you "
+        "write your final summary: ask whether anything is wrong or missing. "
+        "Weigh its advice against the code; you make the final call."
+    )
 
 
 # Ep 5's bash runs on the host. For SWE-bench instances the runner starts the
@@ -96,6 +126,67 @@ def repo_map(path: str = ".") -> str:
         return container.fileop(container.ACTIVE, "repo_map", {"path": path})
     return container_fileops.repo_map(tools.SANDBOX, path)
 
+
+
+# The advisor reads the executor's LIVE conversation. solve() refreshes the
+# reference every iteration: compaction replaces the messages list object, so
+# a one-time capture would silently go stale.
+_ADVISOR_STATE = {"messages": None, "client": None, "in": 0, "out": 0}
+
+_ADVISOR_SYSTEM = (
+    "You are a senior engineer advising a colleague who is mid-task on a "
+    "software issue. You are given their full working transcript and a "
+    "question. Give focused, concrete advice: name the files, functions, and "
+    "layers that matter, call out wrong assumptions or a wrong layer choice, "
+    "and recommend a course of action. If more than one approach is on the "
+    "table, say which one the issue wording and the codebase's own idioms "
+    "favor, and why. Advise -- do not write the full patch."
+)
+
+
+def _render_transcript(messages) -> str:
+    """The executor's conversation rendered for the advisor: system prompt and
+    task verbatim, assistant turns with their tool calls inlined, tool results
+    as-is (they are already strings, and compaction has already bounded the
+    total size)."""
+    lines = []
+    for m in messages:
+        role = m.get("role", "?")
+        content = m.get("content") or ""
+        if role == "assistant" and m.get("tool_calls"):
+            calls = ", ".join(
+                f"{tc['function']['name']}({tc['function']['arguments']})"
+                for tc in m["tool_calls"]
+            )
+            content = (content + "\n" if content else "") + f"[tool calls: {calls}]"
+        lines.append(f"--- {role} ---\n{content}")
+    return "\n\n".join(lines)
+
+
+@tool("Ask a more capable AI model for guidance on this task. It is "
+      "automatically given your full conversation so far -- everything you "
+      "have read, tried, and concluded -- so pass only your specific "
+      "question. It returns concrete advice: which files or layers to "
+      "change, which of several candidate approaches to take, what you may "
+      "have missed. Consult it before committing to an approach, when you "
+      "are stuck or torn between options, and before finishing. It cannot "
+      "edit files or run commands; you act on its advice.")
+def ask_advisor(question: str) -> str:
+    prompt = (
+        "Transcript of my work so far:\n\n"
+        + _render_transcript(_ADVISOR_STATE["messages"] or [])
+        + "\n\n=== MY QUESTION ===\n" + question
+    )
+    resp = _chat_with_retry(
+        _ADVISOR_STATE["client"], model=ADVISOR_MODEL,
+        messages=[{"role": "system", "content": _ADVISOR_SYSTEM},
+                  {"role": "user", "content": prompt}],
+        max_tokens=ADVISOR_MAX_TOKENS,
+    )
+    if resp.usage is not None:
+        _ADVISOR_STATE["in"] += resp.usage.prompt_tokens
+        _ADVISOR_STATE["out"] += resp.usage.completion_tokens
+    return resp.choices[0].message.content or "(the advisor returned no advice)"
 
 
 def _excerpt(text: str, edge: int = 300) -> str:
@@ -186,21 +277,30 @@ def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
     # proxy above (same name, same schema shape -- the model sees no difference).
     file_tools = [bash if t.__name__ == "bash" else t for t in tools.TOOLS]
     base_tools = file_tools + [repo_map, write_plan, list_skills, load_skill]
+    if ADVISOR_MODEL:
+        base_tools.append(ask_advisor)
     base_by_name = {t.__name__: t for t in base_tools}
 
     messages = [
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": problem_statement},
     ]
+    _ADVISOR_STATE.update({
+        "messages": messages,
+        "client": client if ADVISOR_BASE_URL == BASE_URL else _client(ADVISOR_BASE_URL),
+        "in": 0, "out": 0,
+    })
     iteration = 0
     total_in = total_out = 0
     compactions = compact_in = compact_out = 0
     tool_call_count = 0
-    mechanism_calls = {"write_plan": 0, "list_skills": 0, "load_skill": 0, "repo_map": 0}
+    mechanism_calls = {"write_plan": 0, "list_skills": 0, "load_skill": 0,
+                       "repo_map": 0, "ask_advisor": 0}
     audit_bounces, audit_unresolved = 0, []
     while iteration < MAX_ITERATIONS:
         iteration += 1
         tools.CURRENT_ROUND = iteration
+        _ADVISOR_STATE["messages"] = messages  # compaction swaps the list object
         messages[0] = {"role": "system",
                        "content": system_with_skills(system_with_plan(SYSTEM))}
         by_name = {**base_by_name, **skills.LOADED_TOOLS}
@@ -291,6 +391,12 @@ def solve(repo_dir: Path, problem_statement: str, audit=None) -> str:
                 "loaded": list(skills.LOADED_SKILLS),
             },
             "orientation": {"repo_map": mechanism_calls["repo_map"]},
+            "advisor": {
+                "model": ADVISOR_MODEL or None,
+                "calls": mechanism_calls["ask_advisor"],
+                "advisor_in": _ADVISOR_STATE["in"],
+                "advisor_out": _ADVISOR_STATE["out"],
+            },
             "audit": {"bounces": audit_bounces, "unresolved": audit_unresolved},
         }],
         "config": {"MODEL": MODEL, "MAX_ITERATIONS": MAX_ITERATIONS},
