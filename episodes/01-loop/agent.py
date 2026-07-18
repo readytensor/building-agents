@@ -128,6 +128,11 @@ BASH_TOOL = {
     },
 }
 
+# The tool list main() hands to run_agent — Ep 1 has exactly one tool. (Here
+# this is the raw schema list the API sees; from Ep 2 on, TOOLS holds
+# @tool-decorated functions and run_agent derives the schemas.)
+TOOLS = [BASH_TOOL]
+
 # The system prompt lives in system_prompt.md next to this file: prompt text is
 # configuration, not loop logic. Its core is shared verbatim by every episode.
 SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
@@ -266,7 +271,7 @@ def main():
     client = OpenAI(api_key=api_key_for(base_url), base_url=base_url or None)
 
     print(f"USER: {TASK}\n")
-    final = run_agent(client, model, SYSTEM, [BASH_TOOL], TASK)
+    final = run_agent(client, model, SYSTEM, TOOLS, TASK)
     print(f"\n=== FINAL RESPONSE ===\n\n{final}")
     write_tool_telemetry()
     write_metrics(model, SYSTEM, TASK)

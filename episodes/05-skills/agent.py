@@ -83,13 +83,13 @@ def api_key_for(base_url: str):
 # compaction.py.)
 MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 200))
 
-# --- Tool registry. The base tools are always available: Ep 4's seven
+# --- Tool registry. These are the always-available BASE tools: Ep 4's seven
 # (six file primitives + write_plan) plus Ep 5's two skill tools (list_skills,
 # load_skill). main() passes this list into run_agent. Skill-provided tools
 # (web_search, lint, …) are NOT here — load_skill adds them to
 # skills.LOADED_TOOLS, and the loop merges that in each turn, so a tool the
 # agent unlocks mid-run becomes callable.
-BASE_TOOLS = FILE_TOOLS + [write_plan, list_skills, load_skill]
+TOOLS = FILE_TOOLS + [write_plan, list_skills, load_skill]
 
 
 # The system prompt lives in system_prompt.md next to this file: prompt text is
@@ -292,7 +292,7 @@ def main():
     )
 
     print(f"USER: {TASK}\n")
-    final = run_agent(client, model, SYSTEM, BASE_TOOLS, summarizer_client, summarizer_model, TASK)
+    final = run_agent(client, model, SYSTEM, TOOLS, summarizer_client, summarizer_model, TASK)
     if final is None:
         print(f"\n=== MAX_ITERATIONS REACHED ({MAX_ITERATIONS}) — aborting ===")
     else:
