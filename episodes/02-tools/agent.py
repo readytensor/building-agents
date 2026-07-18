@@ -34,11 +34,12 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 INITIAL = Path("initial")
 
 
-def api_key_for(base_url: str):
-    """Return the API key for the provider in `base_url`, read from the
-    environment — so switching providers means changing only LLM_BASE_URL, never
-    moving keys around. Anything OpenAI-compatible (Together, DeepSeek,
-    OpenRouter, …) falls through to OPENAI_API_KEY."""
+def make_client(base_url: str) -> OpenAI:
+    """Connect to the LLM provider behind `base_url` — any OpenAI-compatible
+    endpoint. The matching API key is picked from the environment by provider,
+    so switching providers means changing only LLM_BASE_URL, never moving keys
+    around. Anything OpenAI-compatible (Together, DeepSeek, OpenRouter, …)
+    falls through to OPENAI_API_KEY."""
     by_provider = {
         "anthropic": "ANTHROPIC_API_KEY",
         "openrouter": "OPENROUTER_API_KEY",
@@ -46,10 +47,12 @@ def api_key_for(base_url: str):
         "googleapis": "GOOGLE_API_KEY",
         "manus": "MANUS_API_KEY",
     }
-    for fragment, key_var in by_provider.items():
+    key_var = "OPENAI_API_KEY"
+    for fragment, provider_key_var in by_provider.items():
         if fragment in base_url:
-            return os.environ.get(key_var)
-    return os.environ.get("OPENAI_API_KEY")
+            key_var = provider_key_var
+            break
+    return OpenAI(api_key=os.environ.get(key_var), base_url=base_url or None)
 
 
 # The system prompt lives in system_prompt.md next to this file: prompt text is
@@ -175,12 +178,12 @@ def main():
         shutil.rmtree(SANDBOX)
     shutil.copytree(INITIAL, SANDBOX)
 
-    # LLM client. The openai package targets any OpenAI-compatible endpoint;
-    # switch providers by changing LLM_BASE_URL / LLM_AGENT_MODEL in .env.
+    # LLM client. Which provider/model to use is runtime config, read from
+    # .env; make_client (defined above) does the connecting.
     load_dotenv(Path("../../.env"))
     base_url = os.environ.get("LLM_BASE_URL") or ""
     model = os.environ.get("LLM_AGENT_MODEL", "gpt-5-mini")
-    client = OpenAI(api_key=api_key_for(base_url), base_url=base_url or None)
+    client = make_client(base_url)
 
     print(f"USER: {TASK}\n")
     final = run_agent(client, model, SYSTEM, TOOLS, TASK)
