@@ -40,6 +40,11 @@ agent.py owns the LLM client, the run_agent loop, delegate, the parallel
 dispatcher, and the .agents registry. The carried-forward primitives live in
 tools.py / compaction.py / planning.py / skills.py (one-way imports).
 
+run_agent() is importable and callable from your own code; main() owns the
+sandbox reset, the orchestrator invocation, and the telemetry files. (Unlike
+Eps 1-5 the LLM client stays module-level: delegate's model-facing signature
+can't thread a client through the run_agent recursion.)
+
 See ../../README.md for context.
 """
 import itertools
@@ -67,12 +72,9 @@ from compaction import COMPACTION_THRESHOLD, KEEP_LAST_ITERATIONS, compact  # no
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-# --- 1. Sandbox reset. SANDBOX is defined in tools.py; the reset to a clean
-# copy of initial/ is the agent's bootstrap.
+# --- 1. The agent's working directory: a fresh copy of initial/, reset by
+# main(). SANDBOX is defined in tools.py — the tools are bound to it.
 INITIAL = Path("initial")
-if SANDBOX.exists():
-    shutil.rmtree(SANDBOX)
-shutil.copytree(INITIAL, SANDBOX)
 
 # --- 2. LLM client (same provider-portable setup as Eps 1-5).
 def api_key_for(base_url: str):
@@ -503,7 +505,7 @@ AGENT_CONFIGS["orchestrator"] = AgentConfig(
 )
 
 
-# --- 9. The task + invocation.
+# --- 9. The task.
 TASK = """I want to round out our GFM support with three more features:
 
   1. Strikethrough: ~~text~~ -> <del>text</del>
@@ -519,19 +521,32 @@ aren't implemented.
 
 Make sure all existing tests still pass. Keep diffs minimal."""
 
-print(f"USER: {TASK}\n")
 
-try:
-    final_summary = run_agent(TASK, "orchestrator")
-except Exception as e:
-    print(f"\n!!! TOP-LEVEL EXCEPTION: {type(e).__name__}: {e}")
-    final_summary = f"(crashed: {e})"
+# --- 10. Setup and run. The sandbox reset and the invocation live here, so
+# importing this module (to reuse run_agent) doesn't reset the sandbox or
+# kick off a run.
+def main():
+    # Sandbox reset: every run starts from a clean copy of initial/.
+    if SANDBOX.exists():
+        shutil.rmtree(SANDBOX)
+    shutil.copytree(INITIAL, SANDBOX)
 
-# --- 10. Final output + metrics (recorded for run.py to render).
-print("\n" + "=" * 70)
-print("=== FINAL ORCHESTRATOR SUMMARY ===")
-print("=" * 70)
-print(final_summary)
+    print(f"USER: {TASK}\n")
+    try:
+        final_summary = run_agent(TASK, "orchestrator")
+    except Exception as e:
+        print(f"\n!!! TOP-LEVEL EXCEPTION: {type(e).__name__}: {e}")
+        final_summary = f"(crashed: {e})"
 
-write_tool_telemetry()
-write_metrics()
+    # Final output + metrics (recorded for run.py to render).
+    print("\n" + "=" * 70)
+    print("=== FINAL ORCHESTRATOR SUMMARY ===")
+    print("=" * 70)
+    print(final_summary)
+
+    write_tool_telemetry()
+    write_metrics()
+
+
+if __name__ == "__main__":
+    main()

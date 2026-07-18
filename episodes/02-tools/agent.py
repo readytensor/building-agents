@@ -5,8 +5,12 @@ Adds general primitives (list_files, read, write, edit, grep) alongside bash,
 plus a tiny @tool decorator that builds each tool's JSON-schema from its
 signature.
 The tools now live in tools.py; this file is just the agent loop — which is
-identical to Ep 1 except for dispatching by tool name. Naive stop condition is
-still in place; the done tool arrives in Ep 3.
+identical to Ep 1 except for dispatching by tool name. Completion is still
+the natural stop: the loop ends when the model emits no tool calls.
+
+The loop lives in run_agent() — a function you can import and call from your
+own code (give it a task, get the final answer). main() owns everything that
+touches the world: the sandbox reset, the client, and the telemetry files.
 
 See ../../README.md for context.
 """
@@ -20,21 +24,14 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from tiktoken import get_encoding
 
-import tools  # module ref so the loop can set tools.CURRENT_ROUND each turn
-from tools import SANDBOX, TOOL_DEFS, TOOLS_BY_NAME, write_tool_telemetry
+import tools as tools_module  # aliased: run_agent's `tools` parameter takes the canonical name; the loop sets tools_module.CURRENT_ROUND each turn
+from tools import SANDBOX, TOOLS, write_tool_telemetry
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-# --- 1. Sandbox reset. SANDBOX is defined in tools.py (the tools are bound to
-# it); the reset to a clean copy of initial/ is the agent's bootstrap.
+# The agent's working directory: a fresh copy of initial/, reset by main().
+# SANDBOX itself is defined in tools.py — the tools are bound to it.
 INITIAL = Path("initial")
-if SANDBOX.exists():
-    shutil.rmtree(SANDBOX)
-shutil.copytree(INITIAL, SANDBOX)
-
-# --- 2. LLM client. The openai package targets any OpenAI-compatible endpoint;
-# switch providers by changing LLM_BASE_URL / LLM_AGENT_MODEL in .env.
-load_dotenv(Path("../../.env"))
 
 
 def api_key_for(base_url: str):
@@ -55,9 +52,42 @@ def api_key_for(base_url: str):
     return os.environ.get("OPENAI_API_KEY")
 
 
-BASE_URL = os.environ.get("LLM_BASE_URL") or ""
-MODEL = os.environ.get("LLM_AGENT_MODEL", "gpt-5-mini")
-client = OpenAI(api_key=api_key_for(BASE_URL), base_url=BASE_URL or None)
+# The system prompt lives in system_prompt.md next to this file: prompt text is
+# configuration, not loop logic. Its core is shared verbatim by every episode.
+SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
+# The task: write a README. This continues Ep 1's second task -- only now the
+# agent has real file tools, so the file lands in a single write() call instead
+# of the many shell-escaping workarounds the bash-only agent needed in Ep 1.
+TASK = (
+    "This project has no README. Explore the codebase in the current directory "
+    "and write a README.md for it. Cover: what the project does, how to install "
+    "and use it (including the CLI), its architecture, and how to run the tests. "
+    "Base everything on what you actually find in the code; don't guess."
+)
+
+# --- Usage telemetry: token counts per run, recorded by run_agent as it goes.
+# The agent only RECORDS (to metrics.json); the harness (run.py) RENDERS the
+# summary. (Tool-call telemetry lives in tools.py, next to the decorator that
+# records it.)
+USAGE = {
+    "iterations": 0,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "per_iter": [],  # {model_in, model_out, tools, tools_out} per round
+}
+
+
+def write_metrics(model: str, system: str, task: str):
+    """Write this run's token usage to metrics.json. Recording only — the
+    harness (run.py) reads this and renders the summary, so the agent stays
+    minimal and all usage reporting lives in one place."""
+    metrics = {
+        "agents": [{"label": "agent", **USAGE}],
+        "inputs": {"system": system, "task": task},
+        "config": {"MODEL": model},
+    }
+    with open("metrics.json", "w", encoding="utf-8") as f:
+        json.dump(metrics, f, indent=2)
 
 
 # tiktoken encoder for the per-round tool-result token count (tools_out). Most of
@@ -73,98 +103,92 @@ def _count_tokens(messages):
     return len(_ENC.encode("\n".join(str(m.get("content") or "") for m in messages)))
 
 
-# --- 3. Usage telemetry: token counts per run -> metrics.json. The harness
-# (run.py) renders the summary. (Tool-call telemetry lives in tools.py, next to
-# the decorator that records it.)
-def write_metrics():
-    """Write this run's token usage to metrics.json. Recording only — the
-    harness (run.py) reads this and renders the summary, so the agent stays
-    minimal and all usage reporting lives in one place."""
-    metrics = {
-        "agents": [{
-            "label": "agent",
-            "iterations": iteration,
-            "input_tokens": total_in,
-            "output_tokens": total_out,
-            "per_iter": per_iter,  # {model_in, model_out, tools, tools_out} per round
-        }],
-        "inputs": {"system": SYSTEM, "task": TASK},
-        "config": {"MODEL": MODEL},
-    }
-    with open("metrics.json", "w", encoding="utf-8") as f:
-        json.dump(metrics, f, indent=2)
+# --- The agent loop, as a function. The signature is the anatomy of an agent:
+# a model, a system prompt, tools, and a task — give it those, get the final
+# answer. Identical to Ep 1 except `tools` is now a list of @tool-decorated
+# functions (schemas AND dispatch derive from it) instead of one hardwired tool.
+def run_agent(client, model: str, system: str, tools: list, task: str) -> str:
+    """Run the agent loop on `task` until the model stops requesting tool
+    calls; return its final message. Records token usage into USAGE along the
+    way (tool calls record themselves in tools.py)."""
+    tools_by_name = {t.__name__: t for t in tools}
+    tool_defs = [t.tool_definition for t in tools]
+    messages = [
+        {"role": "system", "content": system},
+        {"role": "user", "content": task},
+    ]
+    iteration = 0
+
+    while True:
+        iteration += 1
+        tools_module.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
+        resp = client.chat.completions.create(
+            model=model, messages=messages, tools=tool_defs,
+        )
+        usage = resp.usage
+        USAGE["iterations"] = iteration
+        USAGE["input_tokens"] += usage.prompt_tokens
+        USAGE["output_tokens"] += usage.completion_tokens
+        USAGE["per_iter"].append({"model_in": usage.prompt_tokens, "model_out": usage.completion_tokens, "tools": 0, "tools_out": 0})
+
+        msg = resp.choices[0].message
+        USAGE["per_iter"][-1]["tools"] = len(msg.tool_calls or [])   # tool calls requested this round
+        messages.append(msg.model_dump(exclude_none=True))
+
+        if not msg.tool_calls:
+            return msg.content or ""
+
+        round_tool_msgs = []
+        for tc in msg.tool_calls:
+            try:
+                fn = tools_by_name[tc.function.name]
+                args = json.loads(tc.function.arguments)
+                parts = []
+                for k, v in args.items():
+                    if len(repr(v)) < 60:
+                        parts.append(f"{k}={v!r}")
+                    else:
+                        parts.append(f"{k}=<{len(str(v))} chars>")
+                arg_preview = ", ".join(parts)
+                print(f"> {tc.function.name}({arg_preview})")
+                result = fn(**args)
+            except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
+                # Tool errors come back to the model as the tool result, not as an agent crash.
+                # The model can self-correct on the next iteration.
+                result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
+                print(f"  ! {result}")
+            preview = result if len(result) < 5000 else result[:5000] + "...[truncated]"
+            print(f"  {preview}\n")
+            tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
+            round_tool_msgs.append(tool_msg)
+            messages.append(tool_msg)
+
+        # Tool results are most of the context growth (a file read dwarfs the model's
+        # request); record this round's tool-result tokens so the per-iter numbers add up.
+        USAGE["per_iter"][-1]["tools_out"] = _count_tokens(round_tool_msgs)
 
 
-# --- 4. The agent loop. Identical to Ep 1 except for the dispatch by tool name.
-# The system prompt lives in system_prompt.md next to this file: prompt text is
-# configuration, not loop logic. Its core is shared verbatim by every episode.
-SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
-# The task: write a README. This continues Ep 1's second task -- only now the
-# agent has real file tools, so the file lands in a single write() call instead
-# of the many shell-escaping workarounds the bash-only agent needed in Ep 1.
-TASK = (
-    "This project has no README. Explore the codebase in the current directory "
-    "and write a README.md for it. Cover: what the project does, how to install "
-    "and use it (including the CLI), its architecture, and how to run the tests. "
-    "Base everything on what you actually find in the code; don't guess."
-)
+# --- Setup and run. Everything with side effects lives here, so importing
+# this module (to reuse run_agent or the tools) touches nothing.
+def main():
+    # Sandbox reset: every run starts from a clean copy of initial/.
+    if SANDBOX.exists():
+        shutil.rmtree(SANDBOX)
+    shutil.copytree(INITIAL, SANDBOX)
 
-messages = [
-    {"role": "system", "content": SYSTEM},
-    {"role": "user", "content": TASK},
-]
-print(f"USER: {TASK}\n")
+    # LLM client. The openai package targets any OpenAI-compatible endpoint;
+    # switch providers by changing LLM_BASE_URL / LLM_AGENT_MODEL in .env.
+    load_dotenv(Path("../../.env"))
+    base_url = os.environ.get("LLM_BASE_URL") or ""
+    model = os.environ.get("LLM_AGENT_MODEL", "gpt-5-mini")
+    client = OpenAI(api_key=api_key_for(base_url), base_url=base_url or None)
 
-total_in = total_out = 0
-iteration = 0
-per_iter = []
+    print(f"USER: {TASK}\n")
+    final = run_agent(client, model, SYSTEM, TOOLS, TASK)
+    print(f"\n=== FINAL RESPONSE ===\n\n{final}")
+    write_tool_telemetry()
+    write_metrics(model, SYSTEM, TASK)
 
-while True:
-    iteration += 1
-    tools.CURRENT_ROUND = iteration   # tag tool calls with the round they happen in
-    resp = client.chat.completions.create(
-        model=MODEL, messages=messages, tools=TOOL_DEFS,
-    )
-    usage = resp.usage
-    total_in += usage.prompt_tokens
-    total_out += usage.completion_tokens
-    per_iter.append({"model_in": usage.prompt_tokens, "model_out": usage.completion_tokens, "tools": 0, "tools_out": 0})
 
-    msg = resp.choices[0].message
-    per_iter[-1]["tools"] = len(msg.tool_calls or [])   # tool calls requested this round
-    messages.append(msg.model_dump(exclude_none=True))
-
-    if not msg.tool_calls:
-        print(f"\n=== FINAL RESPONSE ===\n\n{msg.content or ''}")
-        write_tool_telemetry()
-        write_metrics()
-        break
-
-    round_tool_msgs = []
-    for tc in msg.tool_calls:
-        try:
-            fn = TOOLS_BY_NAME[tc.function.name]
-            args = json.loads(tc.function.arguments)
-            parts = []
-            for k, v in args.items():
-                if len(repr(v)) < 60:
-                    parts.append(f"{k}={v!r}")
-                else:
-                    parts.append(f"{k}=<{len(str(v))} chars>")
-            arg_preview = ", ".join(parts)
-            print(f"> {tc.function.name}({arg_preview})")
-            result = fn(**args)
-        except (TypeError, KeyError, json.JSONDecodeError, ValueError) as e:
-            # Tool errors come back to the model as the tool result, not as an agent crash.
-            # The model can self-correct on the next iteration.
-            result = f"Error executing {tc.function.name}: {type(e).__name__}: {e}"
-            print(f"  ! {result}")
-        preview = result if len(result) < 5000 else result[:5000] + "...[truncated]"
-        print(f"  {preview}\n")
-        tool_msg = {"role": "tool", "tool_call_id": tc.id, "content": result}
-        round_tool_msgs.append(tool_msg)
-        messages.append(tool_msg)
-
-    # Tool results are most of the context growth (a file read dwarfs the model's
-    # request); record this round's tool-result tokens so the per-iter numbers add up.
-    per_iter[-1]["tools_out"] = _count_tokens(round_tool_msgs)
+if __name__ == "__main__":
+    main()
