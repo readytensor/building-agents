@@ -40,10 +40,8 @@ agent.py owns the LLM client, the run_agent loop, delegate, the parallel
 dispatcher, and the .agents registry. The carried-forward primitives live in
 tools.py / compaction.py / planning.py / skills.py (one-way imports).
 
-run_agent() is importable and callable from your own code; main() owns the
-sandbox reset, the orchestrator invocation, and the telemetry files. (Unlike
-Eps 1-5 the LLM client stays module-level: delegate's model-facing signature
-can't thread a client through the run_agent recursion.)
+Unlike Eps 1-5, the LLM client stays module-level: delegate's model-facing
+signature can't thread a client through the run_agent recursion.
 
 See ../../README.md for context.
 """

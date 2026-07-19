@@ -8,10 +8,6 @@ The tools now live in tools.py; this file is just the agent loop — which is
 identical to Ep 1 except for dispatching by tool name. Completion is still
 the natural stop: the loop ends when the model emits no tool calls.
 
-The loop lives in run_agent() — a function you can import and call from your
-own code (give it a task, get the final answer). main() owns everything that
-touches the world: the sandbox reset, the client, and the telemetry files.
-
 See ../../README.md for context.
 """
 import json

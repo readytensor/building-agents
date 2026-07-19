@@ -20,10 +20,6 @@ This file is just the agent loop. It owns the LLM client and passes it into
 compact(); imports are one-way (`agent → tools`, `agent → compaction`,
 `agent → planning`).
 
-The loop lives in run_agent() — a function you can import and call from your
-own code (give it a task, get the final answer). main() owns everything that
-touches the world: the sandbox reset, the clients, and the telemetry files.
-
 See ../../README.md for context.
 """
 import json
