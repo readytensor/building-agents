@@ -18,6 +18,8 @@ run.py is just the outer harness; it can run any episode.
     python ../../run.py --capture             # also record terminal output
 """
 import argparse
+import contextlib
+import io
 import json
 import shutil
 import subprocess
@@ -29,7 +31,7 @@ from pathlib import Path
 # render them on every platform (Windows consoles default to cp1252).
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-import capture  # sibling module; sys.path[0] is run.py's folder, so this resolves
+import capture  # noqa: E402  sibling module; sys.path[0] is run.py's folder, so this resolves
 
 
 def make_run_dir(logs_dir: Path) -> Path:
@@ -214,6 +216,36 @@ def print_tool_call_summary(tool_calls_path: Path) -> None:
         print("path: " + " → ".join(tools))
 
 
+def append_summary_to_capture(run_dir: Path, text: str) -> None:
+    """The tool-call and usage summaries render after the capture window has
+    closed (they need the collected files), so a captured run's terminal.log
+    would end at the agent's final response and the end-of-run summary would
+    be missing from the recording. Append the same lines to both capture
+    files, stamped with the run's end time, so the logs end the way the live
+    terminal did."""
+    log_path = run_dir / "terminal.log"
+    jsonl_path = run_dir / "terminal.jsonl"
+    if not log_path.exists():
+        return
+    duration = 0.0
+    if jsonl_path.exists():
+        with open(jsonl_path, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    record = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if record.get("type") == "end":
+                    duration = record.get("duration_s", 0.0)
+    with open(log_path, "a", encoding="utf-8") as f:
+        for line in text.splitlines():
+            f.write(f"[+{duration:>7.2f}s] {line}\n")
+    if jsonl_path.exists():
+        with open(jsonl_path, "a", encoding="utf-8") as f:
+            for line in text.splitlines():
+                f.write(json.dumps({"t": duration, "text": line}) + "\n")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run an episode's agent as a fresh, recorded run.")
     parser.add_argument("--cwd", default=".", help="episode directory to run in (default: current)")
@@ -253,8 +285,15 @@ def main() -> int:
             print(f"[run] collected {name}", flush=True)
 
     # The harness — not the agent — renders the tool-call and usage summaries.
-    print_tool_call_summary(run_dir / "tool_calls.jsonl")
-    print_metrics_summary(run_dir / "metrics.json")
+    # Rendered into a buffer so a captured run can also append them to its
+    # terminal logs (they print after the capture window closes).
+    summary = io.StringIO()
+    with contextlib.redirect_stdout(summary):
+        print_tool_call_summary(run_dir / "tool_calls.jsonl")
+        print_metrics_summary(run_dir / "metrics.json")
+    print(summary.getvalue(), end="", flush=True)
+    if args.capture:
+        append_summary_to_capture(run_dir, summary.getvalue())
 
     print(f"\n[run] done (exit {exit_code}) -> {run_dir}", flush=True)
     return exit_code
