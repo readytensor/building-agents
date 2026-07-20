@@ -34,8 +34,9 @@ _ENC = get_encoding("cl100k_base")
 
 # --- Compaction knobs. Env-overridable; defaults shown below. Both are used in
 # compact(): the threshold gates on the middle's token count, KEEP sets the tail.
-COMPACTION_THRESHOLD = int(os.environ.get("COMPACTION_THRESHOLD", 20_000))  # tokens in the compactable middle before we summarize it.
+COMPACTION_THRESHOLD = int(os.environ.get("COMPACTION_THRESHOLD", 25_000))  # tokens in the compactable middle before we summarize it.
 KEEP_LAST_ITERATIONS = int(os.environ.get("KEEP_LAST_ITERATIONS", 2))            # recent assistant rounds preserved uncompacted.
+SUMMARIZER_MAX_TOKENS = int(os.environ.get("SUMMARIZER_MAX_TOKENS", 8192))        # backstop cap on the summary reply (runaway protection).
 
 SUMMARIZER_PROMPT = (
     "You're summarizing an in-progress coding-agent transcript so the agent can keep "
@@ -44,7 +45,8 @@ SUMMARIZER_PROMPT = (
     "what was found), (3) what's been changed so far (files written, edits applied), "
     "(4) what's still to do, (5) any errors encountered and how they were handled. "
     "Be terse but specific — the agent will continue from this summary, so don't "
-    "omit anything that would force re-investigation."
+    "omit anything that would force re-investigation. The summary must be "
+    "no more than 1000 words."
 )
 
 
@@ -117,7 +119,12 @@ def compact(messages, client, model):
             f"Transcript to summarize:\n{_format_as_transcript(middle)}"
         )},
     ]
-    summary_resp = client.chat.completions.create(model=model, messages=summarizer_msgs)
+    # The prompt asks for a bounded summary; max_tokens is the backstop for a
+    # runaway generation (one 64K "summary" once entered history and got
+    # re-summarized on the next fire — bound the summarizer like any model call).
+    summary_resp = client.chat.completions.create(
+        model=model, messages=summarizer_msgs, max_tokens=SUMMARIZER_MAX_TOKENS,
+    )
     summary_text = summary_resp.choices[0].message.content or ""
     summary_msg = {
         "role": "user",
