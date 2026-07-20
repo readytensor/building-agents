@@ -252,6 +252,11 @@ def main() -> int:
     parser.add_argument("--logdir", default=None, help="where run folders are created (default: <cwd>/logs)")
     parser.add_argument("--capture", action="store_true", help="also record terminal output into the run folder")
     parser.add_argument(
+        "-g", "--grade", action="store_true",
+        help="after the run, run the episode's grade.py and record its output "
+             "in the run folder (grade.log)",
+    )
+    parser.add_argument(
         "--collect", action="append", default=None,
         help="agent output file(s) to move into the run folder (default: tool_calls.jsonl)",
     )
@@ -294,6 +299,27 @@ def main() -> int:
     print(summary.getvalue(), end="", flush=True)
     if args.capture:
         append_summary_to_capture(run_dir, summary.getvalue())
+
+    # --grade: run the episode's own grading script (held-out tests) against
+    # the sandbox the run left behind, and keep the verdict with the run.
+    # Grading is judgment on the finished run — it never feeds back into the
+    # agent, so it runs strictly after everything above.
+    if args.grade:
+        grade_script = cwd / "grade.py"
+        if not grade_script.exists():
+            # Not every episode has a grading layer; --grade just skips then.
+            print("[run] --grade: no grade.py in this episode, skipping", flush=True)
+        else:
+            graded = subprocess.run(
+                [sys.executable, "grade.py"], cwd=cwd,
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+            )
+            grade_output = graded.stdout + (("\n" + graded.stderr) if graded.stderr.strip() else "")
+            print(grade_output, end="" if grade_output.endswith("\n") else "\n", flush=True)
+            (run_dir / "grade.log").write_text(grade_output, encoding="utf-8")
+            print(f"[run] grade recorded -> {run_dir / 'grade.log'}", flush=True)
+            if exit_code == 0:
+                exit_code = graded.returncode
 
     print(f"\n[run] done (exit {exit_code}) -> {run_dir}", flush=True)
     return exit_code
