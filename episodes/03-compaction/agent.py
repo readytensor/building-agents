@@ -72,10 +72,19 @@ MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 150))
 # The system prompt lives in system_prompt.md next to this file: prompt text is
 # configuration, not loop logic. Its core is shared verbatim by every episode.
 SYSTEM = (Path(__file__).parent / "system_prompt.md").read_text(encoding="utf-8")
-TASK = """I'm about to start adding inline tokens to the parser, and the
-generic name `Node` for our AST type is going to get confusing. Can you
-rename `Node` to `ASTNode` throughout the codebase? The change is purely
-naming — semantics stay identical. All tests should pass after."""
+TASK = """Our markdown documents are getting long and hard to navigate. Add a
+table-of-contents extension to md2html:
+
+- Every rendered heading gets an HTML id derived from its text; duplicate
+  heading texts get distinct ids (-1, -2, ...).
+- A line consisting of exactly [TOC] becomes a labeled, nested list of links
+  to every heading. Without the marker: anchors only, no TOC.
+- Implement it as a new extension under md2html/extensions/, registered like
+  the existing ones.
+
+I've added a fixture pair at tests/fixtures/toc.md and tests/fixtures/toc.html
+showing the expected output; it currently fails. Make it pass, add your own
+tests, and make sure the existing tests still pass too."""
 
 # --- Usage telemetry: token counts per run, recorded by run_agent as it goes.
 # The agent only RECORDS (to metrics.json); the harness (run.py) RENDERS the
