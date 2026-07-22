@@ -8,11 +8,12 @@ markdown text → lexer → tokens → parser → AST → renderer → HTML
 
 It implements a deliberately small but real subset of Markdown: ATX headings, paragraphs, ordered/unordered (and nested) lists, fenced code blocks, blockquotes, horizontal rules, and the usual inline constructs (emphasis, strong, inline code, links, images, hard breaks).
 
-Three optional extensions ship in-tree:
+Four optional extensions ship in-tree:
 
 - **tables**: GitHub-flavored pipe tables with column alignment.
 - **code_blocks**: adds the `language-xxx` class on fenced code blocks.
 - **footnotes**: `[^1]` references plus collected definitions at the document end.
+- **reference_links**: `[text][id]` references resolved against `[id]: url "title"` definitions.
 
 ## Install
 
@@ -23,23 +24,26 @@ pip install -e .[test]
 ## Use
 
 ```
-md2html INPUT_FILE [-o OUTPUT_FILE] [--stdout]
+md2html INPUT_FILE [-o OUTPUT_FILE] [--stdout] [-s | --standalone]
         [--no-extensions] [--extensions LIST]
 ```
 
 Examples:
 
 ```
-md2html README.md                       # writes README.html
+md2html README.md                       # writes README.html (HTML body fragment)
+md2html README.md --standalone          # writes a complete standalone HTML page
 md2html README.md --stdout              # prints to stdout
 md2html post.md --extensions tables     # tables only
 md2html post.md --no-extensions         # core markdown only
 ```
 
+By default `md2html` emits an HTML body fragment (the usual contract for a Markdown converter); `--standalone` (`-s`) wraps it in a complete HTML document with a built-in stylesheet, ready to open in a browser.
+
 Or invoke as a module:
 
 ```
-python -m md2html.cli README.md --stdout
+python -m md2html README.md --stdout
 ```
 
 ## Library use
@@ -71,4 +75,4 @@ Tests cover the lexer, the parser, and end-to-end fixture pairs under `tests/fix
 
 ## Scope
 
-This is intentionally a teaching codebase, not a production Markdown engine. The following are **out of scope** by design: HTML pass-through, setext headings, indented code blocks, reference-style links, strikethrough, task lists, autolinks, and math.
+This is intentionally a teaching codebase, not a production Markdown engine. The following are **out of scope** by design: HTML pass-through, setext headings, indented code blocks, strikethrough, task lists, autolinks, and math.

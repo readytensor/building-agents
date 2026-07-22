@@ -23,23 +23,26 @@ pip install -e .[test]
 ## Use
 
 ```
-md2html INPUT_FILE [-o OUTPUT_FILE] [--stdout]
+md2html INPUT_FILE [-o OUTPUT_FILE] [--stdout] [-s | --standalone]
         [--no-extensions] [--extensions LIST]
 ```
 
 Examples:
 
 ```
-md2html README.md                       # writes README.html
+md2html README.md                       # writes README.html (HTML body fragment)
+md2html README.md --standalone          # writes a complete standalone HTML page
 md2html README.md --stdout              # prints to stdout
 md2html post.md --extensions tables     # tables only
 md2html post.md --no-extensions         # core markdown only
 ```
 
+By default `md2html` emits an HTML body fragment (the usual contract for a Markdown converter); `--standalone` (`-s`) wraps it in a complete HTML document with a built-in stylesheet, ready to open in a browser.
+
 Or invoke as a module:
 
 ```
-python -m md2html.cli README.md --stdout
+python -m md2html README.md --stdout
 ```
 
 ## Library use
