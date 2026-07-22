@@ -141,3 +141,7 @@ The code uses the `openai` Python package against the **Chat Completions API**, 
 ## Scope
 
 This series is about the **architectural core** of how agents work: the loop, tools, context management, planning, skills, and multi-agent topology. Deliberately out of scope (each its own topic) are production ops, durable execution, full guardrails, framework reviews, and model training/RL.
+
+## License
+
+MIT. See [LICENSE](./LICENSE). Use the code freely in your own projects and experiments.
