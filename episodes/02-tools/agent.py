@@ -178,7 +178,7 @@ def main():
     # .env; make_client (defined above) does the connecting.
     load_dotenv(Path("../../.env"))
     base_url = os.environ.get("LLM_BASE_URL") or ""
-    model = os.environ.get("LLM_AGENT_MODEL", "gpt-5-mini")
+    model = os.environ.get("LLM_AGENT_MODEL", "deepseek/deepseek-v4-flash")
     client = make_client(base_url)
 
     print(f"USER: {TASK}\n")

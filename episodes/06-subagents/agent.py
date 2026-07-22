@@ -97,7 +97,7 @@ def make_client(base_url: str) -> OpenAI:
 
 
 BASE_URL = os.environ.get("LLM_BASE_URL") or ""
-MODEL = os.environ.get("LLM_AGENT_MODEL", "gpt-5-mini")
+MODEL = os.environ.get("LLM_AGENT_MODEL", "deepseek/deepseek-v4-flash")
 client = make_client(BASE_URL)
 
 SUMMARIZER_BASE_URL = os.environ.get("LLM_SUMMARIZER_BASE_URL") or BASE_URL

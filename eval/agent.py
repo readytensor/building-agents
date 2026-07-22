@@ -47,7 +47,7 @@ skills._SKILLS_DIR = _REPO_ROOT / "eval" / "skills"
 # Eval runs have their own model config so the shared LLM_* vars can keep
 # driving the episodes. Precedence: EVAL_LLM_* (from .env or inline) falls back
 # to the episodes' LLM_* if unset.
-MODEL = os.environ.get("EVAL_LLM_AGENT_MODEL") or os.environ.get("LLM_AGENT_MODEL", "gpt-5-mini")
+MODEL = os.environ.get("EVAL_LLM_AGENT_MODEL") or os.environ.get("LLM_AGENT_MODEL", "deepseek/deepseek-v4-flash")
 BASE_URL = os.environ.get("EVAL_LLM_BASE_URL") or os.environ.get("LLM_BASE_URL") or ""
 MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 200))
 
