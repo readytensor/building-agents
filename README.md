@@ -23,6 +23,12 @@ The worked example is a **coding agent**, the cleanest domain to learn in: a tig
 
 Each episode follows the same rhythm: one question, one limitation, one addition in code, one before/after.
 
+## A note on safety
+
+The agent runs real shell commands with your user account's permissions. The file tools (`read`, `write`, `edit`, `grep`, `list_files`) are restricted to the `sandbox/` folder and cannot escape it, but `bash` is not: the sandbox is only its starting directory, and nothing prevents a command from using `cd ..` or an absolute path. The model decides what commands to run, so treat every run as untrusted.
+
+Following along with the episode tasks as written is low risk, and that is how we run it. If you point the agent at your own tasks, your own repositories, or open-ended experiments, run it inside a Docker container or a throwaway VM, not directly on a machine you care about. Real agent products solve this with OS-level sandboxes and containers; that layer is out of scope for this series on purpose.
+
 ## Quickstart
 
 ```bash
