@@ -197,13 +197,13 @@ def write_metrics(model: str, system: str, task: str):
 # the context growth is tool results (a file read dwarfs the model's request), so
 # we measure their real token size. cl100k_base is OpenAI's tokenizer; on Claude
 # it's a close approximation — fine for a telemetry count.
-_ENC = get_encoding("cl100k_base")
+_TOKENIZER = get_encoding("cl100k_base")
 
 
 def _count_tokens(messages):
     """Real token count (tiktoken) of these messages' content — used to record
     each round's tool-result total (tools_out)."""
-    return len(_ENC.encode("\n".join(str(m.get("content") or "") for m in messages)))
+    return len(_TOKENIZER.encode("\n".join(str(m.get("content") or "") for m in messages)))
 
 
 # --- 2. The agent loop, as a function. The signature is the anatomy of an

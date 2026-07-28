@@ -30,7 +30,7 @@ from tiktoken import get_encoding
 # tiktoken encoder for measuring the middle's size (the part we summarize).
 # cl100k_base is OpenAI's tokenizer; for Claude/others it's an approximation, but
 # a real token count is plenty for a go/no-go "is the middle big enough" trigger.
-_ENC = get_encoding("cl100k_base")
+_TOKENIZER = get_encoding("cl100k_base")
 
 # --- Compaction knobs. Env-overridable; defaults shown below. Both are used in
 # compact(): the threshold gates on the middle's token count, KEEP sets the tail.
@@ -86,7 +86,7 @@ def _count_tokens(messages):
         parts.append(str(m.get("content") or ""))
         for tc in (m.get("tool_calls") or []):
             parts.append(str(tc.get("function", {}).get("arguments", "")))
-    return len(_ENC.encode("\n".join(parts)))
+    return len(_TOKENIZER.encode("\n".join(parts)))
 
 
 def compact(messages, client, model):
