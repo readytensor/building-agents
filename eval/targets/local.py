@@ -6,11 +6,13 @@ fail_to_pass = the fixture tests the task exists to make pass (pinned by
 hand from each tree's baseline), pass_to_pass = every other test in the
 tree (collected automatically at load time, before any agent runs).
 
-Episode 3's rename task is the special case: nothing fails at baseline (a
-rename breaks no behavior), so its success test is HELD OUT -- written into
-the working copy at scoring time, after the agent's diff is captured. This
-mirrors SWE-bench's held-out test_patch: the agent never sees the tests it
-is graded on, so it can't tune -- or rewrite -- them.
+Episode 3's instance also carries HELD-OUT tests -- written into the working
+copy at scoring time, after the agent's diff is captured. The visible toc
+fixture pins the expected output by example; the held-out tests probe the
+RULE behind the examples (slug normalization, dedup at depth, label-not-in-
+list, href/id consistency, no-marker behavior). This mirrors SWE-bench's
+held-out test_patch: the agent never sees the tests it is graded on, so it
+can't tune -- or rewrite -- them.
 """
 import subprocess
 from pathlib import Path
@@ -20,10 +22,19 @@ from eval.targets import Instance
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
-_EP3_TASK = """I'm about to start adding inline tokens to the parser, and the
-generic name `Node` for our AST type is going to get confusing. Can you
-rename `Node` to `ASTNode` throughout the codebase? The change is purely
-naming — semantics stay identical. All tests should pass after."""
+_EP3_TASK = """Our markdown documents are getting long and hard to navigate. Add a
+table-of-contents extension to md2html:
+
+- Every rendered heading gets an HTML id derived from its text; duplicate
+  heading texts get distinct ids (-1, -2, ...).
+- A line consisting of exactly [TOC] becomes a labeled, nested list of links
+  to every heading. Without the marker: anchors only, no TOC.
+- Implement it as a new extension under md2html/extensions/, registered like
+  the existing ones.
+
+I've added a fixture pair at tests/fixtures/toc.md and tests/fixtures/toc.html
+showing the expected output; it currently fails. Make it pass, add your own
+tests, and make sure the existing tests still pass too."""
 
 _EP4_TASK = """I want to add support for reference-style links to our markdown
 library. They look like this:
@@ -86,11 +97,22 @@ Make sure all existing tests still pass. Keep diffs minimal."""
 
 DEFAULT_SPECS = [
     {
-        # Success test is held out: eval/held_out/md2html__ep3-rename-astnode/
-        "id": "md2html__ep3-rename-astnode",
+        # The visible toc fixture plus the held-out rule-probing tests
+        # (eval/held_out/md2html__ep3-toc/, injected at scoring time).
+        "id": "md2html__ep3-toc",
         "base": _REPO_ROOT / "episodes" / "03-compaction" / "initial",
         "problem_statement": _EP3_TASK,
-        "fail_to_pass": ["tests/test_rename.py::test_ast_class_is_named_astnode"],
+        "fail_to_pass": [
+            "tests/test_renderer.py::test_fixture_pair[toc]",
+            "tests/test_toc_heldout.py::test_anchor_on_every_heading_level",
+            "tests/test_toc_heldout.py::test_slug_is_lowercase_with_punctuation_stripped",
+            "tests/test_toc_heldout.py::test_duplicate_headings_get_distinct_sequential_ids",
+            "tests/test_toc_heldout.py::test_marker_replaced_with_labeled_nav",
+            "tests/test_toc_heldout.py::test_toc_nesting_follows_heading_levels",
+            "tests/test_toc_heldout.py::test_label_is_not_a_list_entry",
+            "tests/test_toc_heldout.py::test_toc_hrefs_match_heading_ids_exactly",
+            "tests/test_toc_heldout.py::test_no_marker_means_anchors_but_no_nav",
+        ],
     },
     {
         "id": "md2html__ep4-reference-links",

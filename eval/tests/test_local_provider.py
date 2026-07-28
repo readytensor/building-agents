@@ -34,7 +34,7 @@ def test_default_specs_are_the_episode_tasks():
     instances = build_instances()
     by_id = {i.id: i for i in instances}
     assert set(by_id) == {
-        "md2html__ep3-rename-astnode", "md2html__ep4-reference-links",
+        "md2html__ep3-toc", "md2html__ep4-reference-links",
         "md2html__ep5-github-alerts", "md2html__ep6-gfm-trio",
     }
     for inst in instances:
@@ -42,10 +42,13 @@ def test_default_specs_are_the_episode_tasks():
         # Each tree's suite has 40+ tests; a tiny count means collection broke.
         assert len(inst.pass_to_pass) >= 40, f"{inst.id}: suspiciously few P2P ids"
         assert not set(inst.fail_to_pass) & set(inst.pass_to_pass)
-    # The failing fixture tests are pinned per episode; ep3's success test is
-    # held out (injected at scoring time), since a rename fails nothing.
-    assert by_id["md2html__ep3-rename-astnode"].fail_to_pass == [
-        "tests/test_rename.py::test_ast_class_is_named_astnode"]
+    # The failing fixture tests are pinned per episode; ep3 additionally grades
+    # against held-out rule-probing tests (injected at scoring time), so its
+    # fail_to_pass mixes the visible fixture with the held-out node ids.
+    ep3_f2p = by_id["md2html__ep3-toc"].fail_to_pass
+    assert ep3_f2p[0] == "tests/test_renderer.py::test_fixture_pair[toc]"
+    assert all(n.startswith("tests/test_toc_heldout.py::") for n in ep3_f2p[1:])
+    assert len(ep3_f2p) == 9
     assert len(by_id["md2html__ep6-gfm-trio"].fail_to_pass) == 3
 
 
@@ -53,9 +56,9 @@ def test_held_out_files_are_discovered_by_instance_id():
     # Held-out grading files live under eval/held_out/<instance-id>/, keyed by
     # repo-relative path -- the configuration-as-files convention.
     from eval.targets.local import _load_held_out
-    files = _load_held_out("md2html__ep3-rename-astnode")
-    assert list(files) == ["tests/test_rename.py"]
-    assert "ASTNode" in files["tests/test_rename.py"]
+    files = _load_held_out("md2html__ep3-toc")
+    assert list(files) == ["tests/test_toc_heldout.py"]
+    assert "def test_" in files["tests/test_toc_heldout.py"]
     assert _load_held_out("no-such-instance") == {}
 
 
