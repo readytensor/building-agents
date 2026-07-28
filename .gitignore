@@ -1,40 +1,27 @@
+# Local-only working files — not part of the public repo.
 tmp/
-
-# Internal spec / planning version of the README — not for the public repo.
-# The public-facing README.md is committed; this detailed one is for initial use 
-# during series planning only.
 README-INTERNAL.md
 
-# Coding agents 
+# Coding agents
 .claude/
 CLAUDE.md
 Codex.md
 
-
-# (Internal build/design specs now live under tmp/spec/ — covered by the tmp/ rule above.)
-
 # Alternative sandbox directories (scratch/experiment scripts use these)
 episodes/*/_sandbox*/
 
-# Underscore-prefixed directories under episodes/ are scratch/experiment dirs
-# (e.g. _sweep_*, _what_if_*, _ablation_*, _before_*) — same convention as
-# the _*.py scripts rule below but extended to directories.
+# Underscore-prefixed directories and scripts under episodes/ are local
+# scratch/experiments — same convention for both. The negation re-includes
+# dunder modules (__init__.py, __main__.py), which also start with "_" and
+# MUST ship — without it the md2html package can't be imported.
 episodes/_*/
-
-# Underscore-prefixed scripts in episodes/ are internal/scratch (e.g. _before.py,
-# _what_if_ep1_only.py) — used for reproducing recorded experiments, not viewer-facing.
-# Negation re-includes dunder modules (__init__.py, __main__.py), which also start
-# with "_" and MUST ship — without it the md2html package can't be imported.
 episodes/**/_*.py
 !episodes/**/__*.py
 
-# Recorded run logs that wind up inside episodes/<N-name>/ are run byproducts.
-# Canonical run logs live under tmp/runs/<epXX>/ (which is already gitignored
-# via the top-level tmp/ rule).
+# Stray run logs inside episodes/<N-name>/ are run byproducts.
 episodes/**/run*.log
 
-# --- Companion code artifacts (migrated from the former code/.gitignore;
-# consolidated here now that the whole repo ships as one unit) ---
+# --- Code artifacts ---
 # Python
 __pycache__/
 *.py[cod]
