@@ -317,6 +317,10 @@ def main() -> int:
             grade_output = graded.stdout + (("\n" + graded.stderr) if graded.stderr.strip() else "")
             print(grade_output, end="" if grade_output.endswith("\n") else "\n", flush=True)
             (run_dir / "grade.log").write_text(grade_output, encoding="utf-8")
+            # Also append the verdict to the captured terminal files (same as the
+            # end-of-run summaries), so terminal.log tells the whole story and
+            # nobody has to open grade.log to learn whether the run passed.
+            append_summary_to_capture(run_dir, grade_output)
             print(f"[run] grade recorded -> {run_dir / 'grade.log'}", flush=True)
             if exit_code == 0:
                 exit_code = graded.returncode
