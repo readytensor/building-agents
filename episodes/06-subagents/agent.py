@@ -479,12 +479,16 @@ def run_agent(task: str, agent_type: str) -> str:
         # Compaction — per-worker, on this agent's own message history.
         before = len(messages)
         messages, did, ci, co, _middle = compact(messages, summarizer_client, SUMMARIZER_MODEL)
+        metrics.compact_in += ci     # counted even when the summary was rejected —
+        metrics.compact_out += co    # a guard-skipped attempt still spent these tokens
         if did:
             metrics.compactions += 1
-            metrics.compact_in += ci
-            metrics.compact_out += co
             p(f"  [COMPACTION FIRED — {before} messages → {len(messages)}, "
               f"summarizer in={ci} out={co}]")
+        elif ci:
+            # The guard in compact() rejected a truncated/empty summary reply.
+            p(f"  [COMPACTION SKIPPED — summary reply hit its token cap; "
+              f"keeping full history this round (summarizer in={ci} out={co})]")
 
     # Iteration cap reached without a natural stop.
     last_text = ""

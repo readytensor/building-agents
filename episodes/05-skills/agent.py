@@ -256,12 +256,15 @@ def run_agent(client, model: str, system: str, tools: list,
         before = len(messages)
         messages, did, ci, co, middle_tok = compact(messages, summarizer_client, summarizer_model)
         USAGE["per_iter"][-1]["middle"] = middle_tok   # compactable-middle size this turn (the sawtooth metric)
+        USAGE["compact_in"] += ci    # counted even when the summary was rejected —
+        USAGE["compact_out"] += co   # a guard-skipped attempt still spent these tokens
         if did:
             USAGE["compactions"] += 1
             USAGE["per_iter"][-1]["compacted"] = True   # the middle crossed the threshold this iteration
-            USAGE["compact_in"] += ci
-            USAGE["compact_out"] += co
             print(f"  [COMPACTION FIRED — {before} messages → {len(messages)}, summarizer in={ci} out={co}]\n")
+        elif ci:
+            # The guard in compact() rejected a truncated/empty summary reply.
+            print(f"  [COMPACTION SKIPPED — summary reply hit its token cap; keeping full history this round (summarizer in={ci} out={co})]\n")
 
     return None   # iteration cap reached without a natural stop
 

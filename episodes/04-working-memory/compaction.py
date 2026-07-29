@@ -36,7 +36,11 @@ _TOKENIZER = get_encoding("cl100k_base")
 # compact(): the threshold gates on the middle's token count, KEEP sets the tail.
 COMPACTION_THRESHOLD = int(os.environ.get("COMPACTION_THRESHOLD", 25_000))  # tokens in the compactable middle before we summarize it.
 KEEP_LAST_ITERATIONS = int(os.environ.get("KEEP_LAST_ITERATIONS", 2))            # recent assistant rounds preserved uncompacted.
-SUMMARIZER_MAX_TOKENS = int(os.environ.get("SUMMARIZER_MAX_TOKENS", 8192))        # backstop cap on the summary reply (runaway protection).
+SUMMARIZER_MAX_TOKENS = int(os.environ.get("SUMMARIZER_MAX_TOKENS", 15_000))  # cap on one summarizer reply. Roomy on purpose:
+# a reasoning model's hidden thinking comes out of this same budget and its length is unpredictable — a tight cap would
+# truncate healthy calls. This cap is also what bounds the summary that can enter history (one 64K "summary" once did, and
+# got re-summarized on the next fire): a reply that hits the cap is never installed — the guard in compact() skips the
+# round instead — so the worst case is a wasted call, not a poisoned history.
 
 SUMMARIZER_PROMPT = (
     "You're summarizing an in-progress coding-agent transcript so the agent can keep "
@@ -45,8 +49,7 @@ SUMMARIZER_PROMPT = (
     "what was found), (3) what's been changed so far (files written, edits applied), "
     "(4) what's still to do, (5) any errors encountered and how they were handled. "
     "Be terse but specific — the agent will continue from this summary, so don't "
-    "omit anything that would force re-investigation. The summary must be "
-    "no more than 1000 words."
+    "omit anything that would force re-investigation."
 )
 
 
@@ -119,13 +122,18 @@ def compact(messages, client, model):
             f"Transcript to summarize:\n{_format_as_transcript(middle)}"
         )},
     ]
-    # The prompt asks for a bounded summary; max_tokens is the backstop for a
-    # runaway generation (one 64K "summary" once entered history and got
-    # re-summarized on the next fire — bound the summarizer like any model call).
     summary_resp = client.chat.completions.create(
         model=model, messages=summarizer_msgs, max_tokens=SUMMARIZER_MAX_TOKENS,
     )
-    summary_text = summary_resp.choices[0].message.content or ""
+    summary_text = (summary_resp.choices[0].message.content or "").strip()
+    su = summary_resp.usage
+    # Guard: never install a bad summary over the middle it replaces. An empty
+    # reply, or one cut off by the token cap (finish_reason "length" — e.g. a
+    # reasoning spiral ate the budget and left a stub), is a failed attempt:
+    # skip compaction this round, keep the full history, and simply try again
+    # next turn (a retry normally succeeds).
+    if not summary_text or summary_resp.choices[0].finish_reason == "length":
+        return messages, False, su.prompt_tokens, su.completion_tokens, middle_tokens
     summary_msg = {
         "role": "user",
         "content": (
@@ -134,5 +142,4 @@ def compact(messages, client, model):
             "[End of summary. Continue with the most recent turns.]"
         ),
     }
-    su = summary_resp.usage
     return head + [summary_msg] + tail, True, su.prompt_tokens, su.completion_tokens, middle_tokens
