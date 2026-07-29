@@ -4,7 +4,10 @@ Episode 3 — Compaction
 This episode's headline mechanism: rolling-summary compaction. When the
 compactable *middle* of the message history grows past COMPACTION_THRESHOLD, that
 middle is summarized via a second LLM call and replaced with one summary message
-— so a long-running task doesn't keep paying for the full transcript every turn.
+— so a long-running task doesn't keep paying for the full transcript every turn. If the
+summarizer call fails (an empty or cap-truncated reply), nothing is installed —
+the round is skipped and the next turn retries — so a bad summary can never
+replace the history it was meant to compress.
 
 We trigger on the token count of the *middle* — the part that actually gets
 summarized — not the whole call's input. Counting the total would fire on tokens

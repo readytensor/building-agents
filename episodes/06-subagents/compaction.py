@@ -5,7 +5,10 @@ Ep 3's headline mechanism, carried forward unchanged: rolling-summary
 compaction. When the compactable *middle* of the message history grows past
 COMPACTION_THRESHOLD, that middle is summarized via a second LLM call and
 replaced with one summary message — so a long-running task doesn't keep paying
-for the full transcript every turn.
+for the full transcript every turn. If the summarizer call fails (an empty or
+cap-truncated reply), nothing is installed — the round is skipped and the next
+turn retries — so a bad summary can never replace the history it was meant to
+compress.
 
 In Ep 6 each worker runs its own loop with its own message history, so compact()
 is called per-worker, on per-call state. The function is unchanged and stateless
