@@ -39,7 +39,7 @@ _TOKENIZER = get_encoding("cl100k_base")
 # compact(): the threshold gates on the middle's token count, KEEP sets the tail.
 COMPACTION_THRESHOLD = int(os.environ.get("COMPACTION_THRESHOLD", 25_000))  # tokens in the compactable middle before we summarize it.
 KEEP_LAST_ITERATIONS = int(os.environ.get("KEEP_LAST_ITERATIONS", 2))            # recent assistant rounds preserved uncompacted.
-SUMMARIZER_MAX_TOKENS = int(os.environ.get("SUMMARIZER_MAX_TOKENS", 15_000))  # cap on one summarizer reply. Roomy on purpose:
+SUMMARIZER_MAX_TOKENS = int(os.environ.get("SUMMARIZER_MAX_TOKENS", 50_000))  # cap on one summarizer reply. Roomy on purpose:
 # a reasoning model's hidden thinking comes out of this same budget and its length is unpredictable — a tight cap would
 # truncate healthy calls. This cap is also what bounds the summary that can enter history (one 64K "summary" once did, and
 # got re-summarized on the next fire): a reply that hits the cap is never installed — the guard in compact() skips the

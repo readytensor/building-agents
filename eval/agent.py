@@ -58,11 +58,12 @@ MAX_ITERATIONS = int(os.environ.get("MAX_ITERATIONS", 200))
 # answers with bounded advice (never edits).
 ADVISOR_MODEL = os.environ.get("LLM_ADVISOR_MODEL") or ""
 ADVISOR_BASE_URL = os.environ.get("LLM_ADVISOR_BASE_URL") or BASE_URL
-# Bounds the advisor's reply. Reasoning models (Sonnet 5 etc.) spend
-# "thinking" tokens against this same budget BEFORE any visible text -- 2000
-# starved the reply to empty in testing; 8000 leaves thinking headroom while
-# still capping runaway replies.
-ADVISOR_MAX_TOKENS = int(os.environ.get("ADVISOR_MAX_TOKENS", 8000))
+# Runaway cap on the advisor's reply, not a budget. Reasoning models (Sonnet 5
+# etc.) spend "thinking" tokens against this same limit BEFORE any visible
+# text, and the thinking length is unpredictable -- 2000 starved the reply to
+# empty in testing, and so did 8000 later. Sized like the summarizer's cap:
+# generous enough that a healthy call never hits it.
+ADVISOR_MAX_TOKENS = int(os.environ.get("ADVISOR_MAX_TOKENS", 50_000))
 
 # The system prompt lives in eval/system_prompt.md, byte-identical to Ep 5's
 # (the episode this agent is built from); a drift test keeps every copy in sync.
